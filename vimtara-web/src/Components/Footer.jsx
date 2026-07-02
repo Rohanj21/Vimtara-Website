@@ -3,13 +3,18 @@ import { Mail, ArrowRight } from 'lucide-react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
+import { useLocation } from 'react-router-dom'; // 1. Import useLocation
 
 gsap.registerPlugin(ScrollTrigger);
 
 export default function Footer() {
   const containerRef = useRef(null);
+  const location = useLocation(); // 2. Track the current URL path
 
   useGSAP(() => {
+    // Force GSAP to recalculate page heights when navigating between pages
+    ScrollTrigger.refresh();
+
     const tl = gsap.timeline({
       scrollTrigger: {
         trigger: containerRef.current,
@@ -26,7 +31,9 @@ export default function Footer() {
       { opacity: 1, duration: 1, ease: "power2.out" }, 
       "-=0.4"
     );
-  }, { scope: containerRef });
+    
+  // 3. Add location.pathname as a dependency so this re-runs on route change
+  }, { scope: containerRef, dependencies: [location.pathname] }); 
 
   return (
     <footer ref={containerRef} className="bg-[#05080f] pt-20 pb-8 relative overflow-hidden border-t border-slate-800/50">
@@ -53,7 +60,7 @@ export default function Footer() {
               India's premier AI-powered compliance command center. We transform fragmented statutory obligations into a seamless, automated, and risk-free operation.
             </p>
             
-            {/* Social Icons (Replaced with inline SVGs) */}
+            {/* Social Icons */}
             <div className="flex items-center gap-4">
               <a href="#" className="w-10 h-10 rounded-full bg-slate-800/50 flex items-center justify-center text-slate-400 hover:bg-blue-600 hover:text-white transition-all duration-300">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg>

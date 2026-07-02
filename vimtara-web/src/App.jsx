@@ -1,27 +1,21 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import HeroSection from './components/HeroSection';
-import PlatformSection from './components/PlatformSection';
-import HowItWorksSection from './components/HowItWorksSection';
-import FeaturesSplitSection from './components/FeaturesSplitSection';
-import ConciergeSection from './components/ConciergeSection';
-import TestimonialsSection from './components/TestimonialsSection';
-import InsightsSection from './components/InsightsSection';
-import CtaSection from './components/CtaSection';
-import Footer from './components/Footer'; // Import
+import Footer from './components/Footer';
+import Home from './pages/Home';
+import Pricing from './pages/Pricing';
 
 export default function App() {
   return (
-    <>
+    <Router>
       <Navbar />
-      <HeroSection />
-      <PlatformSection />
-      <HowItWorksSection />
-      <FeaturesSplitSection />
-      <ConciergeSection />
-      <TestimonialsSection />
-      <InsightsSection />
-      <CtaSection />
+      
+      {/* The Routes block swaps out the page content based on the URL */}
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/pricing" element={<Pricing />} />
+      </Routes>
+      
       <Footer />
-    </>
+    </Router>
   );
 }
