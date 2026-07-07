@@ -1,0 +1,58 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// 1. Role Definition
+enum Role {
+  ADMIN
+  USER
+  ASSISTANT
+}
+
+// 2. User Architecture
+model User {
+  id             String    @id @default(uuid())
+  email          String    @unique
+  passwordHash   String
+  name           String
+  companyName    String?
+  role           Role      @default(USER)
+  
+  // Relations
+  filings        Filing[]
+  messagesSent   Message[] @relation("Sender")
+  messagesRecv   Message[] @relation("Receiver")
+  createdAt      DateTime  @default(now())
+}
+
+// 3. Filing Tracking (MCA, GST, etc.)
+model Filing {
+  id             String    @id @default(uuid())
+  title          String    // e.g., "GSTR-3B Q1", "SPICe+ Part A"
+  status         String    @default("PENDING") // PENDING, ACTION_REQUIRED, FILED
+  dueDate        DateTime
+  
+  // Link filing to a specific user/company
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+}
+
+// 4. Assistant Communication Thread
+model Message {
+  id             String    @id @default(uuid())
+  content        String
+  requiresAction Boolean   @default(false)
+  
+  senderId       String
+  sender         User      @relation("Sender", fields: [senderId], references: [id])
+  
+  receiverId     String
+  receiver       User      @relation("Receiver", fields: [receiverId], references: [id])
+  
+  createdAt      DateTime  @default(now())
+}
