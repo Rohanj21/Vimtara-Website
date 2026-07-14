@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { Edit2, Trash2, Check, X, ShieldAlert, FileCheck, Building2, Filter, AlertTriangle, ArrowUpRight, Search, FileText, Paperclip, Send, CheckCircle2, Clock, Eye } from 'lucide-react';
+import { Edit2, Trash2, Check, X, ShieldAlert, FileCheck, Building2, Filter, AlertTriangle, ArrowUpRight, Search, FileText, CheckCircle2, Eye } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Legend } from 'recharts';
 
 export default function AdminDashboard({ activeTab }) {
@@ -21,14 +21,16 @@ export default function AdminDashboard({ activeTab }) {
   const [timeFilter, setTimeFilter] = useState('6m');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Communications State
-  const [selectedThreadId, setSelectedThreadId] = useState(1);
+  // Global Communications State (Admin Oversight)
+  const [allThreads, setAllThreads] = useState([]);
+  const [selectedThreadId, setSelectedThreadId] = useState(null);
 
   const PIE_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#f43f5e'];
 
   useEffect(() => {
     if (activeTab === 'team') fetchDirectory();
     if (activeTab === 'overview') fetchAnalytics();
+    if (activeTab === 'comms') fetchAllThreads();
   }, [activeTab, timeFilter]);
 
   const fetchDirectory = async () => {
@@ -45,6 +47,19 @@ export default function AdminDashboard({ activeTab }) {
       if (res.ok) setAnalyticsData(await res.json());
     } catch (error) { console.error(error); } 
     finally { setIsLoading(false); }
+  };
+
+  const fetchAllThreads = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/admin/threads');
+      if (res.ok) {
+        const data = await res.json();
+        setAllThreads(data);
+        if (data.length > 0 && !selectedThreadId) {
+          setSelectedThreadId(data[0].id);
+        }
+      }
+    } catch (error) { console.error("Failed to fetch global threads:", error); }
   };
 
   const handleCreateUser = async (e) => {
@@ -69,7 +84,7 @@ export default function AdminDashboard({ activeTab }) {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this account?')) return;
+    if (!window.confirm('Are you sure you want to permanently delete this account?')) return;
     try {
       const res = await fetch(`http://localhost:5000/api/users/${id}`, { method: 'DELETE' });
       if (res.ok) fetchDirectory();
@@ -186,14 +201,8 @@ export default function AdminDashboard({ activeTab }) {
 
   // --- 2. INDUSTRY COMPLIANCE MODULE ---
   if (activeTab === 'industry') {
-    const complianceTrendData = [
-      { month: 'Jan', score: 85 }, { month: 'Feb', score: 88 }, { month: 'Mar', score: 86 },
-      { month: 'Apr', score: 92 }, { month: 'May', score: 95 }, { month: 'Jun', score: 94 }
-    ];
-    const categoryData = [
-      { name: 'GST', filed: 120, pending: 5 }, { name: 'MCA', filed: 45, pending: 12 },
-      { name: 'EPFO', filed: 80, pending: 2 }, { name: 'Tax', filed: 60, pending: 0 }
-    ];
+    const complianceTrendData = [{ month: 'Jan', score: 85 }, { month: 'Feb', score: 88 }, { month: 'Mar', score: 86 }, { month: 'Apr', score: 92 }, { month: 'May', score: 95 }, { month: 'Jun', score: 94 }];
+    const categoryData = [{ name: 'GST', filed: 120, pending: 5 }, { name: 'MCA', filed: 45, pending: 12 }, { name: 'EPFO', filed: 80, pending: 2 }, { name: 'Tax', filed: 60, pending: 0 }];
 
     return (
       <div className="dash-item space-y-8 animate-in fade-in duration-500">
@@ -328,14 +337,9 @@ export default function AdminDashboard({ activeTab }) {
     );
   }
 
-  // --- 4. COMMUNICATIONS VIEW (UPGRADED) ---
+  // --- 4. COMMUNICATIONS VIEW (REAL DATABASE CONNECTION) ---
   if (activeTab === 'comms') {
-    // Mock Threads Data
-    const mockThreads = [
-      { id: 1, title: 'GST GSTR-1 Data Verification', client: 'TechCorp India', assistant: 'Priya S.', status: 'PENDING_ACTION' },
-      { id: 2, title: 'Annual ROC Filing (AOC-4)', client: 'Arceus Pvt Ltd', assistant: 'Rahul M.', status: 'VERIFIED' },
-      { id: 3, title: 'EPFO Monthly Update', client: 'Vimtara LLP', assistant: 'Priya S.', status: 'FILED' }
-    ];
+    const activeThread = allThreads.find(t => t.id === selectedThreadId);
 
     return (
       <div className="dash-item bg-transparent border border-slate-200 rounded-3xl overflow-hidden flex h-[650px] animate-in fade-in duration-500 shadow-sm">
@@ -347,112 +351,102 @@ export default function AdminDashboard({ activeTab }) {
             <p className="text-xs text-slate-500">Monitor client-assistant workflows.</p>
           </div>
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-2 mt-2">Active Filings</div>
-            {mockThreads.map((thread) => (
-              <div 
-                key={thread.id} 
-                onClick={() => setSelectedThreadId(thread.id)}
-                className={`p-4 rounded-xl border cursor-pointer transition-all ${selectedThreadId === thread.id ? 'bg-white border-blue-500 shadow-md ring-1 ring-blue-500/50' : 'bg-transparent border-transparent hover:bg-slate-200/50'}`}
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <div className="font-bold text-sm text-slate-900 truncate pr-2">{thread.title}</div>
-                  {thread.status === 'PENDING_ACTION' && <span className="w-2 h-2 rounded-full bg-rose-500 mt-1"></span>}
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 px-2 mt-2">Global Active Filings</div>
+            
+            {allThreads.length === 0 ? (
+               <div className="p-4 text-xs text-slate-500 text-center">No active threads yet.</div>
+            ) : (
+              allThreads.map((thread) => (
+                <div 
+                  key={thread.id} 
+                  onClick={() => setSelectedThreadId(thread.id)}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all ${selectedThreadId === thread.id ? 'bg-white border-blue-500 shadow-md ring-1 ring-blue-500/50' : 'bg-transparent border-transparent hover:bg-slate-200/50'}`}
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <div className="font-bold text-sm text-slate-900 truncate pr-2">{thread.title}</div>
+                    {thread.status === 'OPEN' && <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1"></span>}
+                  </div>
+                  <div className="text-xs text-slate-500">{thread.user?.companyName || 'Unknown Client'}</div>
+                  <div className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
+                    <Eye size={12} /> Service: {thread.service}
+                  </div>
                 </div>
-                <div className="text-xs text-slate-500">{thread.client}</div>
-                <div className="text-[10px] text-slate-400 mt-2 flex items-center gap-1">
-                  <Eye size={12} /> Overseeing: {thread.assistant}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
         
         {/* Main Chat Area */}
         <div className="w-[70%] flex flex-col bg-white">
-          
-          {/* Admin Oversight Header */}
-          <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <ShieldAlert size={16} className="text-amber-400" />
-                <h3 className="font-bold text-sm">Admin Oversight Mode</h3>
-              </div>
-              <p className="text-[10px] text-slate-400 mt-0.5">You are viewing the {mockThreads.find(t => t.id === selectedThreadId)?.client} workspace in read-only mode.</p>
-            </div>
-            <div className="px-3 py-1 bg-white/10 rounded-lg text-xs font-medium border border-white/20 flex items-center gap-1">
-              <CheckCircle2 size={14} className="text-emerald-400"/> System Synced
-            </div>
-          </div>
-
-          {/* Chat Messages Log */}
-          <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30">
-            
-            {/* Message 1: Client Upload */}
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] font-bold text-slate-400 mb-1">TechCorp India (Client) • 10:00 AM</span>
-              <div className="bg-blue-600 text-white px-5 py-3.5 rounded-2xl rounded-tr-none text-sm max-w-[80%] shadow-md">
-                Hi Priya, I have attached the sales register for Q2. We are ready to proceed with the GSTR-1 filing. Please verify.
-              </div>
-            </div>
-
-            {/* Document Card (Client) */}
-            <div className="flex flex-col items-end">
-              <div className="bg-white border border-slate-200 p-4 rounded-2xl rounded-tr-none shadow-sm max-w-[80%] w-80">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
-                    <FileText size={20} />
+          {activeThread ? (
+            <>
+              {/* Admin Oversight Header */}
+              <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <ShieldAlert size={16} className="text-amber-400" />
+                    <h3 className="font-bold text-sm">Admin Oversight Mode</h3>
                   </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-900">Sales_Register_Q2.xlsx</div>
-                    <div className="text-xs text-slate-500">2.4 MB • Uploaded via Vault</div>
-                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">You are viewing the {activeThread.user?.companyName || 'Unknown Client'} workspace in read-only mode.</p>
                 </div>
-                <button disabled className="w-full py-2 bg-slate-50 text-slate-400 text-xs font-bold rounded-lg border border-slate-200 cursor-not-allowed">
-                  Client Uploaded
-                </button>
-              </div>
-            </div>
-
-            {/* Message 2: Assistant Response */}
-            <div className="flex flex-col items-start">
-              <span className="text-[10px] font-bold text-slate-400 mb-1">Priya S. (Assistant) • 11:30 AM</span>
-              <div className="bg-white border border-slate-200 text-slate-800 px-5 py-3.5 rounded-2xl rounded-tl-none text-sm max-w-[80%] shadow-sm">
-                Thank you. I have run the automated reconciliation against our GST portal records. Everything matches perfectly. I am locking the data and generating the final JSON for the government portal now.
-              </div>
-            </div>
-
-            {/* Action Card (Assistant Verification) */}
-            <div className="flex flex-col items-start">
-              <div className="bg-white border border-slate-200 p-4 rounded-2xl rounded-tl-none shadow-sm max-w-[80%] w-80">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center">
-                    <CheckCircle2 size={20} />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-slate-900">Data Verification Passed</div>
-                    <div className="text-xs text-slate-500">Reconciled by Priya S.</div>
-                  </div>
+                <div className="px-3 py-1 bg-white/10 rounded-lg text-xs font-medium border border-white/20 flex items-center gap-1">
+                  <CheckCircle2 size={14} className="text-emerald-400"/> System Synced
                 </div>
-                {/* Admin sees this as a disabled status indicator, while the Assistant would see this as a clickable button to trigger the filing API */}
-                <button disabled className="w-full py-2 bg-slate-900 text-slate-400 text-xs font-bold rounded-lg cursor-not-allowed flex items-center justify-center gap-2">
-                  <Clock size={14} /> Awaiting Client Approval to File
-                </button>
               </div>
+
+              {/* Chat Messages Log */}
+              <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30">
+                {activeThread.messages.length === 0 ? (
+                   <div className="text-center text-slate-400 text-sm mt-10">No messages in this thread yet.</div>
+                ) : (
+                  activeThread.messages.map(msg => {
+                    const isClient = msg.senderId === activeThread.userId;
+                    return (
+                      <div key={msg.id} className={`flex flex-col ${isClient ? 'items-end' : 'items-start'}`}>
+                        <span className="text-[10px] font-bold text-slate-400 mb-1">{isClient ? 'Client User' : 'Assistant'}</span>
+                        
+                        {msg.content && (
+                          <div className={`${isClient ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'} px-5 py-3.5 rounded-2xl text-sm max-w-[80%] mb-2 break-words`}>
+                            {msg.content}
+                          </div>
+                        )}
+
+                        {msg.hasAttachment && (
+                          <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm max-w-[80%] w-80">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isClient ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
+                                <FileText size={20} />
+                              </div>
+                              <div className="overflow-hidden">
+                                <div className="text-sm font-bold text-slate-900 truncate w-48">{msg.attachmentName}</div>
+                                <div className="text-xs text-slate-500">{msg.attachmentSize}</div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Read-Only Input Area */}
+              <div className="p-4 bg-white border-t border-slate-100">
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 opacity-70">
+                  <Paperclip size={20} className="text-slate-400" />
+                  <input type="text" disabled placeholder="Admin read-only mode..." className="flex-1 bg-transparent text-sm p-2 focus:outline-none cursor-not-allowed" />
+                  <button disabled className="p-2 bg-slate-200 text-slate-400 rounded-lg cursor-not-allowed">
+                    <Send size={18} />
+                  </button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
+              <Eye size={48} className="mb-4 text-slate-300" />
+              <p>Select a thread to oversee.</p>
             </div>
-
-          </div>
-
-          {/* Read-Only Input Area */}
-          <div className="p-4 bg-white border-t border-slate-100">
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 opacity-70">
-              <Paperclip size={20} className="text-slate-400" />
-              <input type="text" disabled placeholder="Admin read-only mode..." className="flex-1 bg-transparent text-sm p-2 focus:outline-none cursor-not-allowed" />
-              <button disabled className="p-2 bg-slate-200 text-slate-400 rounded-lg cursor-not-allowed">
-                <Send size={18} />
-              </button>
-            </div>
-          </div>
-
+          )}
         </div>
       </div>
     );

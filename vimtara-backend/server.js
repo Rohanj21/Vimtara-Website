@@ -183,6 +183,22 @@ app.post('/api/messages', async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Failed to send message' }); }
 });
 
+// 5. Fetch ALL Threads for Admin Oversight
+app.get('/api/admin/threads', async (req, res) => {
+  try {
+    const threads = await prisma.thread.findMany({
+      include: { 
+        messages: { orderBy: { createdAt: 'asc' } },
+        user: { select: { companyName: true, name: true } } // Includes the client's details
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(threads);
+  } catch (error) { 
+    res.status(500).json({ error: 'Failed to fetch all threads' }); 
+  }
+});
+
 // 2. Fetch Aggregated Analytics
 app.get('/api/analytics', async (req, res) => {
   try {
