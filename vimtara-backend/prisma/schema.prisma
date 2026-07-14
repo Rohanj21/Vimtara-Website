@@ -23,10 +23,14 @@ model User {
   companyName    String?
   role           Role      @default(USER)
   
+  // Premium Features
+  plan           String    @default("BASIC") // BASIC, PREMIUM, PREMIUM_PLUS
+  dailyTokens    Int       @default(50)
+  
   // Relations
   filings        Filing[]
+  threads        Thread[]
   messagesSent   Message[] @relation("Sender")
-  messagesRecv   Message[] @relation("Receiver")
   createdAt      DateTime  @default(now())
 }
 
@@ -42,17 +46,33 @@ model Filing {
   user           User      @relation(fields: [userId], references: [id])
 }
 
-// 4. Assistant Communication Thread
+// 4. Thread Model to group chats by service
+model Thread {
+  id             String    @id @default(uuid())
+  title          String
+  service        String    // e.g., 'GST', 'MCA', 'EPFO'
+  status         String    @default("OPEN")
+  
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  
+  messages       Message[]
+  createdAt      DateTime  @default(now())
+}
+
+// 5. Message Model
 model Message {
   id             String    @id @default(uuid())
   content        String
-  requiresAction Boolean   @default(false)
+  hasAttachment  Boolean   @default(false)
+  attachmentName String?
+  attachmentSize String?
+  
+  threadId       String
+  thread         Thread    @relation(fields: [threadId], references: [id])
   
   senderId       String
   sender         User      @relation("Sender", fields: [senderId], references: [id])
-  
-  receiverId     String
-  receiver       User      @relation("Receiver", fields: [receiverId], references: [id])
   
   createdAt      DateTime  @default(now())
 }

@@ -75,6 +75,179 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// --- ADMIN ROUTES (Account Management) ---
+
+// Get all provisioned users
+app.get('/api/users', async (req, res) => {
+  try {
+    // Fetches all users but excludes their password hashes for security
+    const users = await prisma.user.findMany({
+      select: { id: true, name: true, email: true, role: true, companyName: true, createdAt: true }
+    });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch directory' });
+  }
+});
+
+// --- ANALYTICS & DATA SEEDING ROUTES ---
+
+// 1. Data Seeding Route (Run this ONCE via browser or Postman to populate Postgres)
+app.post('/api/seed-analytics', async (req, res) => {
+  try {
+    // Grab the first admin user to attach the mock data to
+    const adminUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+    if (!adminUser) return res.status(400).json({ error: 'No admin user found. Create one first.' });
+
+    const statuses = ['FILED', 'PENDING', 'ACTION_REQUIRED'];
+    const types = ['GST GSTR-3B', 'MCA AOC-4', 'EPFO Return', 'TDS Return'];
+    
+    // Generate 50 random filings over the last 6 months
+    const mockFilings = Array.from({ length: 50 }).map(() => {
+      const pastDate = new Date();
+      pastDate.setMonth(pastDate.getMonth() - Math.floor(Math.random() * 6));
+      
+      return {
+        title: types[Math.floor(Math.random() * types.length)],
+        status: statuses[Math.floor(Math.random() * statuses.length)],
+        dueDate: pastDate,
+        userId: adminUser.id
+      };
+    });
+
+    await prisma.filing.createMany({ data: mockFilings });
+    res.json({ message: 'Successfully seeded 50 statutory filings into PostgreSQL!' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to seed data' });
+  }
+});
+
+// --- CHAT & TOKEN ROUTES ---
+
+// 1. Get user data (including tokens)
+app.get('/api/users/:id/tokens', async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { plan: true, dailyTokens: true } });
+    res.json(user);
+  } catch (error) { res.status(500).json({ error: 'Failed to fetch tokens' }); }
+});
+
+// 2. Fetch User's Threads
+app.get('/api/threads/:userId', async (req, res) => {
+  try {
+    const threads = await prisma.thread.findMany({
+      where: { userId: req.params.userId },
+      include: { messages: { orderBy: { createdAt: 'asc' } } },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(threads);
+  } catch (error) { res.status(500).json({ error: 'Failed to fetch threads' }); }
+});
+
+// 3. Create a New Thread
+app.post('/api/threads', async (req, res) => {
+  try {
+    const { title, service, userId } = req.body;
+    const thread = await prisma.thread.create({
+      data: { title, service, userId },
+      include: { messages: true }
+    });
+    res.json(thread);
+  } catch (error) { res.status(500).json({ error: 'Failed to create thread' }); }
+});
+
+// 4. Send Message & Deduct Tokens
+app.post('/api/messages', async (req, res) => {
+  try {
+    const { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, tokenCost } = req.body;
+    
+    // Verify user has enough tokens
+    const user = await prisma.user.findUnique({ where: { id: senderId } });
+    if (user.dailyTokens < tokenCost) {
+      return res.status(403).json({ error: 'Insufficient tokens. Please upgrade your plan.' });
+    }
+
+    // Deduct tokens and create message in a transaction
+    const [newMessage, updatedUser] = await prisma.$transaction([
+      prisma.message.create({
+        data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize }
+      }),
+      prisma.user.update({
+        where: { id: senderId },
+        data: { dailyTokens: { decrement: tokenCost } }
+      })
+    ]);
+
+    res.json({ message: newMessage, tokensLeft: updatedUser.dailyTokens });
+  } catch (error) { res.status(500).json({ error: 'Failed to send message' }); }
+});
+
+// 2. Fetch Aggregated Analytics
+app.get('/api/analytics', async (req, res) => {
+  try {
+    const { filter } = req.query; // 'all', '6m', '3m'
+    
+    // Fetch all filings (In a real app, you would filter by date based on the query)
+    const filings = await prisma.filing.findMany();
+
+    // 1. Aggregate for Pie Chart (Status Distribution)
+    const statusCounts = filings.reduce((acc, filing) => {
+      acc[filing.status] = (acc[filing.status] || 0) + 1;
+      return acc;
+    }, {});
+
+    const pieData = Object.keys(statusCounts).map(key => ({
+      name: key.replace('_', ' '),
+      value: statusCounts[key]
+    }));
+
+    // 2. Aggregate for Bar Chart (Monthly Volume)
+    const monthlyVolume = filings.reduce((acc, filing) => {
+      const month = new Date(filing.dueDate).toLocaleString('default', { month: 'short' });
+      acc[month] = (acc[month] || 0) + 1;
+      return acc;
+    }, {});
+
+    const barData = Object.keys(monthlyVolume).map(month => ({
+      month,
+      volume: monthlyVolume[month]
+    }));
+
+    res.json({ barData, pieData, totalFilings: filings.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+// Update a user's role or details
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role } = req.body;
+    
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: { name, email, role },
+      select: { id: true, name: true, email: true, role: true, companyName: true }
+    });
+    res.json(updatedUser);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update user account' });
+  }
+});
+
+// Delete a user account
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.user.delete({ where: { id } });
+    res.json({ message: 'Account successfully deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
+});
+
 // Start Server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
