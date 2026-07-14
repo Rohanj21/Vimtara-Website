@@ -7,7 +7,8 @@ import { useGSAP } from '@gsap/react';
 
 // Component Imports
 import AdminDashboard from '../components/dashboard/AdminDashboard';
-import UserDashboard from '../components/dashboard/UserDashboard'; // <-- NEW IMPORT
+import UserDashboard from '../components/dashboard/UserDashboard';
+import AssistantDashboard from '../components/dashboard/AssistantDashboard';
 
 export default function Dashboard() {
   const containerRef = useRef(null);
@@ -56,7 +57,17 @@ export default function Dashboard() {
           <button onClick={() => setActiveTab('comms')} className={linkClasses('comms')}>Communications</button>
         </>
       );
-      
+    }
+
+    // Assistant Navigation
+    if (user?.role === 'ASSISTANT') {
+      return (
+        <>
+          <button onClick={() => setActiveTab('overview')} className={linkClasses('overview')}>Workspace Overview</button>
+          <button onClick={() => setActiveTab('clients')} className={linkClasses('clients')}>Client Roster</button>
+          <button onClick={() => setActiveTab('comms')} className={linkClasses('comms')}>Client Inbox</button>
+        </>
+      );
     }
     
     // Standard User / Client Navigation
@@ -76,11 +87,15 @@ export default function Dashboard() {
       return <AdminDashboard activeTab={activeTab} />;
     }
     
+    if (user?.role === 'ASSISTANT') {
+      return <AssistantDashboard activeTab={activeTab} />;
+    }
+    
     if (user?.role === 'USER') {
       return <UserDashboard activeTab={activeTab} />;
     }
     
-    return <div className="text-slate-500">Assistant Dashboard loading...</div>;
+    return null;
   };
 
   return (
@@ -113,11 +128,11 @@ export default function Dashboard() {
       <main className="flex-1 ml-64 p-10 pt-16"> 
         <div className="dash-item mb-10">
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            {user?.role === 'ADMIN' ? 'Account Management' : 'Compliance Hub'}
+            {user?.role === 'ADMIN' ? 'Account Management' : user?.role === 'ASSISTANT' ? 'Assistant Workspace' : 'Compliance Hub'}
           </h1>
           <p className="text-slate-500 mt-2">
-            {user?.role === 'ADMIN' ? 'Managing compliance network for ' : 'Secure regulatory dashboard for '} 
-            <strong className="text-slate-800">{user?.company}</strong>
+            {user?.role === 'ADMIN' ? 'Managing compliance network for ' : user?.role === 'ASSISTANT' ? 'Managing client portfolio for ' : 'Secure regulatory dashboard for '} 
+            <strong className="text-slate-800">{user?.company || 'Network'}</strong>
           </p>
         </div>
 

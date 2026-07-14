@@ -68,7 +68,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({ 
       token, 
-      user: { name: user.name, email: user.email, company: user.companyName, role: user.role } 
+      user: { id: user.id, name: user.name, email: user.email, company: user.companyName, role: user.role } 
     });
   } catch (error) {
     res.status(500).json({ error: 'Login failed' });
@@ -87,6 +87,34 @@ app.get('/api/users', async (req, res) => {
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch directory' });
+  }
+});
+
+// Update a user's role or details
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, role } = req.body;
+    
+    const updatedUser = await prisma.user.update({
+      where: { id },
+      data: { name, email, role },
+      select: { id: true, name: true, email: true, role: true, companyName: true }
+    });
+    res.json(updatedUser);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update user account' });
+  }
+});
+
+// Delete a user account
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await prisma.user.delete({ where: { id } });
+    res.json({ message: 'Account successfully deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete account' });
   }
 });
 
@@ -120,82 +148,6 @@ app.post('/api/seed-analytics', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to seed data' });
-  }
-});
-
-// --- CHAT & TOKEN ROUTES ---
-
-// 1. Get user data (including tokens)
-app.get('/api/users/:id/tokens', async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { plan: true, dailyTokens: true } });
-    res.json(user);
-  } catch (error) { res.status(500).json({ error: 'Failed to fetch tokens' }); }
-});
-
-// 2. Fetch User's Threads
-app.get('/api/threads/:userId', async (req, res) => {
-  try {
-    const threads = await prisma.thread.findMany({
-      where: { userId: req.params.userId },
-      include: { messages: { orderBy: { createdAt: 'asc' } } },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(threads);
-  } catch (error) { res.status(500).json({ error: 'Failed to fetch threads' }); }
-});
-
-// 3. Create a New Thread
-app.post('/api/threads', async (req, res) => {
-  try {
-    const { title, service, userId } = req.body;
-    const thread = await prisma.thread.create({
-      data: { title, service, userId },
-      include: { messages: true }
-    });
-    res.json(thread);
-  } catch (error) { res.status(500).json({ error: 'Failed to create thread' }); }
-});
-
-// 4. Send Message & Deduct Tokens
-app.post('/api/messages', async (req, res) => {
-  try {
-    const { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, tokenCost } = req.body;
-    
-    // Verify user has enough tokens
-    const user = await prisma.user.findUnique({ where: { id: senderId } });
-    if (user.dailyTokens < tokenCost) {
-      return res.status(403).json({ error: 'Insufficient tokens. Please upgrade your plan.' });
-    }
-
-    // Deduct tokens and create message in a transaction
-    const [newMessage, updatedUser] = await prisma.$transaction([
-      prisma.message.create({
-        data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize }
-      }),
-      prisma.user.update({
-        where: { id: senderId },
-        data: { dailyTokens: { decrement: tokenCost } }
-      })
-    ]);
-
-    res.json({ message: newMessage, tokensLeft: updatedUser.dailyTokens });
-  } catch (error) { res.status(500).json({ error: 'Failed to send message' }); }
-});
-
-// 5. Fetch ALL Threads for Admin Oversight
-app.get('/api/admin/threads', async (req, res) => {
-  try {
-    const threads = await prisma.thread.findMany({
-      include: { 
-        messages: { orderBy: { createdAt: 'asc' } },
-        user: { select: { companyName: true, name: true } } // Includes the client's details
-      },
-      orderBy: { createdAt: 'desc' }
-    });
-    res.json(threads);
-  } catch (error) { 
-    res.status(500).json({ error: 'Failed to fetch all threads' }); 
   }
 });
 
@@ -236,32 +188,104 @@ app.get('/api/analytics', async (req, res) => {
   }
 });
 
-// Update a user's role or details
-app.put('/api/users/:id', async (req, res) => {
+// --- CHAT, TOKEN, & ASSISTANT ROUTES ---
+
+// 1. Get user data (including tokens)
+app.get('/api/users/:id/tokens', async (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, email, role } = req.body;
-    
-    const updatedUser = await prisma.user.update({
-      where: { id },
-      data: { name, email, role },
-      select: { id: true, name: true, email: true, role: true, companyName: true }
+    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { plan: true, dailyTokens: true } });
+    res.json(user);
+  } catch (error) { res.status(500).json({ error: 'Failed to fetch tokens' }); }
+});
+
+// 2. Fetch User's Threads
+app.get('/api/threads/:userId', async (req, res) => {
+  try {
+    const threads = await prisma.thread.findMany({
+      where: { userId: req.params.userId },
+      include: { messages: { orderBy: { createdAt: 'asc' } } },
+      orderBy: { createdAt: 'desc' }
     });
-    res.json(updatedUser);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to update user account' });
+    res.json(threads);
+  } catch (error) { res.status(500).json({ error: 'Failed to fetch threads' }); }
+});
+
+// 3. Create a New Thread
+app.post('/api/threads', async (req, res) => {
+  try {
+    const { title, service, userId } = req.body;
+    const thread = await prisma.thread.create({
+      data: { title, service, userId },
+      include: { messages: true }
+    });
+    res.json(thread);
+  } catch (error) { res.status(500).json({ error: 'Failed to create thread' }); }
+});
+
+// 4. Send Message (Updated to bypass tokens for Assistants/Admins)
+app.post('/api/messages', async (req, res) => {
+  try {
+    const { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, tokenCost } = req.body;
+    
+    const user = await prisma.user.findUnique({ where: { id: senderId } });
+    
+    // Only deduct tokens if the sender is a standard USER
+    if (user.role === 'USER') {
+      if (user.dailyTokens < tokenCost) {
+        return res.status(403).json({ error: 'Insufficient tokens. Please upgrade your plan.' });
+      }
+      
+      const [newMessage, updatedUser] = await prisma.$transaction([
+        prisma.message.create({ data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize } }),
+        prisma.user.update({ where: { id: senderId }, data: { dailyTokens: { decrement: tokenCost } } })
+      ]);
+      return res.json({ message: newMessage, tokensLeft: updatedUser.dailyTokens });
+    } else {
+      // Admin or Assistant sends a message (Free of charge)
+      const newMessage = await prisma.message.create({
+        data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize }
+      });
+      return res.json({ message: newMessage, tokensLeft: null });
+    }
+  } catch (error) { res.status(500).json({ error: 'Failed to send message' }); }
+});
+
+// 5. Fetch ALL Threads for Admin Oversight
+app.get('/api/admin/threads', async (req, res) => {
+  try {
+    const threads = await prisma.thread.findMany({
+      include: { 
+        messages: { orderBy: { createdAt: 'asc' } },
+        user: { select: { companyName: true, name: true } } // Includes the client's details
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(threads);
+  } catch (error) { 
+    res.status(500).json({ error: 'Failed to fetch all threads' }); 
   }
 });
 
-// Delete a user account
-app.delete('/api/users/:id', async (req, res) => {
+// 6. Fetch Assistant Dashboard Data
+app.get('/api/assistant/dashboard', async (req, res) => {
   try {
-    const { id } = req.params;
-    await prisma.user.delete({ where: { id } });
-    res.json({ message: 'Account successfully deleted' });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete account' });
-  }
+    // Fetch all threads with client info
+    const threads = await prisma.thread.findMany({
+      include: { 
+        messages: { orderBy: { createdAt: 'asc' } },
+        user: { select: { name: true, companyName: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    // Fetch all clients (Users)
+    const clients = await prisma.user.findMany({
+      where: { role: 'USER' },
+      select: { id: true, name: true, companyName: true, plan: true, createdAt: true }
+    });
+
+    res.json({ threads, clients });
+  } catch (error) { res.status(500).json({ error: 'Failed to fetch assistant data' }); }
 });
 
 // Start Server

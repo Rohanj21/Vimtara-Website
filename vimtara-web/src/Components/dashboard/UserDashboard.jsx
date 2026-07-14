@@ -27,7 +27,6 @@ export default function UserDashboard({ activeTab }) {
   const [newChatService, setNewChatService] = useState('GST');
   const fileInputRef = useRef(null);
 
-  // 1. Fetch REAL Threads and Tokens from PostgreSQL
   useEffect(() => {
     if (!user?.id) return;
 
@@ -59,7 +58,6 @@ export default function UserDashboard({ activeTab }) {
     if (activeTab === 'comms') fetchThreads();
   }, [activeTab, user?.id]);
 
-  // 2. Create REAL Thread in PostgreSQL
   const handleCreateThread = async (e) => {
     e.preventDefault();
     try {
@@ -83,7 +81,6 @@ export default function UserDashboard({ activeTab }) {
     } catch (error) { console.error("Failed to create thread:", error); }
   };
 
-  // 3. Send REAL Message and Deduct Tokens in PostgreSQL
   const handleSendMessage = async () => {
     if (!messageInput.trim() && !attachment) return;
     const cost = attachment ? 5 : 1;
@@ -110,8 +107,6 @@ export default function UserDashboard({ activeTab }) {
 
       if (res.ok) {
         const data = await res.json();
-        
-        // Update local state with the saved message from the database
         const updatedThreads = threads.map(t => {
           if (t.id === activeThreadId) {
             return { ...t, messages: [...t.messages, data.message] };
@@ -120,12 +115,9 @@ export default function UserDashboard({ activeTab }) {
         });
 
         setThreads(updatedThreads);
-        setTokens(data.tokensLeft); // Backend returns the accurately deducted token count
+        setTokens(data.tokensLeft);
         setMessageInput('');
         setAttachment(null);
-      } else {
-        const errorData = await res.json();
-        alert(errorData.error || "Failed to send message");
       }
     } catch (error) { console.error("Message send error:", error); }
   };
@@ -135,7 +127,6 @@ export default function UserDashboard({ activeTab }) {
       setAttachment(e.target.files[0]);
     }
   };
-
 
   // --- 1. ACCOUNT OVERVIEW ---
   if (activeTab === 'overview') {
@@ -346,15 +337,23 @@ export default function UserDashboard({ activeTab }) {
                     </div>
                   )}
                   {msg.hasAttachment && (
-                    <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm max-w-[80%] w-80">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${msg.senderId === user?.id ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
+                    <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm max-w-[80%] w-80">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${msg.senderId === user?.id ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
                           <FileText size={20} />
                         </div>
                         <div className="overflow-hidden">
                           <div className="text-sm font-bold text-slate-900 truncate w-48">{msg.attachmentName}</div>
                           <div className="text-xs text-slate-500">{msg.attachmentSize}</div>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-2 border-t border-slate-100 pt-2.5">
+                        <button onClick={() => alert(`Opening ${msg.attachmentName} in secure viewer...`)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                          <Eye size={14}/> View
+                        </button>
+                        <button onClick={() => alert(`Downloading ${msg.attachmentName}...`)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                          <Download size={14}/> Download
+                        </button>
                       </div>
                     </div>
                   )}

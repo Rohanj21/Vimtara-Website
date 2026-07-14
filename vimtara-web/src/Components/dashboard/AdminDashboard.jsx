@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { Edit2, Trash2, Check, X, ShieldAlert, FileCheck, Building2, Filter, AlertTriangle, ArrowUpRight, Search, FileText, CheckCircle2, Eye } from 'lucide-react';
+// Fixed: Added Paperclip and Send to the imports
+import { Edit2, Trash2, Check, X, ShieldAlert, FileCheck, Building2, Filter, AlertTriangle, ArrowUpRight, Search, FileText, CheckCircle2, Eye, Paperclip, Send } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Legend } from 'recharts';
 
 export default function AdminDashboard({ activeTab }) {
