@@ -6,22 +6,17 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 export default function UserDashboard({ activeTab }) {
   const { user } = useSelector((state) => state.auth);
 
-  // --- TOKEN & PLAN STATE ---
   const [tokens, setTokens] = useState(50);
   const [plan, setPlan] = useState('BASIC');
   const maxTokens = plan === 'PREMIUM_PLUS' ? 200 : plan === 'PREMIUM' ? 100 : 50;
-  
-  // Custom Token Calculator State
   const [customTokenAmount, setCustomTokenAmount] = useState(50);
-  const TOKEN_PRICE_INR = 15; // ₹15 per token
+  const TOKEN_PRICE_INR = 15; 
 
-  // --- CHAT STATE ---
   const [threads, setThreads] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [messageInput, setMessageInput] = useState('');
   const [attachment, setAttachment] = useState(null);
   
-  // --- MODAL STATE ---
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [newChatTitle, setNewChatTitle] = useState('');
   const [newChatService, setNewChatService] = useState('GST');
@@ -29,7 +24,6 @@ export default function UserDashboard({ activeTab }) {
 
   useEffect(() => {
     if (!user?.id) return;
-
     const fetchUserData = async () => {
       try {
         const res = await fetch(`http://localhost:5000/api/users/${user.id}/tokens`);
@@ -40,20 +34,16 @@ export default function UserDashboard({ activeTab }) {
         }
       } catch (error) { console.error("Failed to fetch tokens:", error); }
     };
-
     const fetchThreads = async () => {
       try {
         const res = await fetch(`http://localhost:5000/api/threads/${user.id}`);
         if (res.ok) {
           const data = await res.json();
           setThreads(data);
-          if (data.length > 0 && !activeThreadId) {
-            setActiveThreadId(data[0].id);
-          }
+          if (data.length > 0 && !activeThreadId) setActiveThreadId(data[0].id);
         }
       } catch (error) { console.error("Failed to fetch threads:", error); }
     };
-
     fetchUserData();
     if (activeTab === 'comms') fetchThreads();
   }, [activeTab, user?.id]);
@@ -64,13 +54,8 @@ export default function UserDashboard({ activeTab }) {
       const res = await fetch('http://localhost:5000/api/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newChatTitle,
-          service: newChatService,
-          userId: user.id
-        })
+        body: JSON.stringify({ title: newChatTitle, service: newChatService, userId: user.id })
       });
-
       if (res.ok) {
         const newThread = await res.json();
         setThreads([newThread, ...threads]);
@@ -86,7 +71,7 @@ export default function UserDashboard({ activeTab }) {
     const cost = attachment ? 5 : 1;
     
     if (tokens < cost) {
-      alert(`Insufficient tokens! This action requires ${cost} tokens, but you only have ${tokens} left. Please upgrade your plan.`);
+      alert(`Insufficient tokens! This requires ${cost} tokens.`);
       return;
     }
 
@@ -100,7 +85,8 @@ export default function UserDashboard({ activeTab }) {
           content: messageInput,
           hasAttachment: !!attachment,
           attachmentName: attachment ? attachment.name : null,
-          attachmentSize: attachment ? '1.2 MB' : null,
+          attachmentSize: attachment ? attachment.size : null,
+          attachmentData: attachment ? attachment.data : null,
           tokenCost: cost
         })
       });
@@ -108,12 +94,9 @@ export default function UserDashboard({ activeTab }) {
       if (res.ok) {
         const data = await res.json();
         const updatedThreads = threads.map(t => {
-          if (t.id === activeThreadId) {
-            return { ...t, messages: [...t.messages, data.message] };
-          }
+          if (t.id === activeThreadId) return { ...t, messages: [...t.messages, data.message] };
           return t;
         });
-
         setThreads(updatedThreads);
         setTokens(data.tokensLeft);
         setMessageInput('');
@@ -122,13 +105,35 @@ export default function UserDashboard({ activeTab }) {
     } catch (error) { console.error("Message send error:", error); }
   };
 
+  // Convert File to Base64 String
   const handleFileAttach = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      setAttachment(e.target.files[0]);
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert("File too large. Maximum size is 5MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        setAttachment({
+          name: file.name,
+          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
+          data: reader.result // This is the Base64 String
+        });
+      };
     }
   };
 
-  // --- 1. ACCOUNT OVERVIEW ---
+  // Trigger File Download
+  const handleDownload = (fileName, base64Data) => {
+    if (!base64Data) return alert("File data not available.");
+    const a = document.createElement('a');
+    a.href = base64Data;
+    a.download = fileName;
+    a.click();
+  };
+
   if (activeTab === 'overview') {
     const complianceTrend = [{ month: 'Jan', score: 92 }, { month: 'Feb', score: 95 }, { month: 'Mar', score: 94 }, { month: 'Apr', score: 98 }, { month: 'May', score: 98 }, { month: 'Jun', score: 100 }];
     return (
@@ -198,7 +203,6 @@ export default function UserDashboard({ activeTab }) {
     );
   }
 
-  // --- 2. FILING REPOSITORY ---
   if (activeTab === 'filings') {
     return (
       <div className="dash-item bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
@@ -246,7 +250,6 @@ export default function UserDashboard({ activeTab }) {
     );
   }
 
-  // --- 3. COMMUNICATIONS & ACTION DESK ---
   if (activeTab === 'comms') {
     const activeThread = threads.find(t => t.id === activeThreadId);
     return (
@@ -336,6 +339,8 @@ export default function UserDashboard({ activeTab }) {
                       {msg.content}
                     </div>
                   )}
+                  
+                  {/* UPDATE: Interactive File Download Card */}
                   {msg.hasAttachment && (
                     <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm max-w-[80%] w-80">
                       <div className="flex items-center gap-3 mb-3">
@@ -348,10 +353,10 @@ export default function UserDashboard({ activeTab }) {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 border-t border-slate-100 pt-2.5">
-                        <button onClick={() => alert(`Opening ${msg.attachmentName} in secure viewer...`)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                        <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
                           <Eye size={14}/> View
                         </button>
-                        <button onClick={() => alert(`Downloading ${msg.attachmentName}...`)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                        <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
                           <Download size={14}/> Download
                         </button>
                       </div>
@@ -407,12 +412,9 @@ export default function UserDashboard({ activeTab }) {
     );
   }
 
-  // --- 4. SUBSCRIPTION & PLAN ---
   if (activeTab === 'plan') {
     return (
       <div className="dash-item space-y-8 animate-in fade-in duration-500">
-        
-        {/* Current Status Header */}
         <div className="bg-slate-900 rounded-3xl p-8 text-white flex justify-between items-center relative overflow-hidden shadow-lg">
           <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500 opacity-20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
           <div className="relative z-10 flex items-center gap-4">
@@ -432,10 +434,7 @@ export default function UserDashboard({ activeTab }) {
           </div>
         </div>
 
-        {/* Upgrade Plans Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Basic Plan */}
           <div className={`bg-white p-8 rounded-3xl border ${plan === 'BASIC' ? 'border-blue-500 ring-4 ring-blue-50 shadow-md' : 'border-slate-200 shadow-sm'} relative flex flex-col`}>
             {plan === 'BASIC' && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-blue-500 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">Current</div>}
             <Package size={32} className="text-slate-700 mb-4" />
@@ -451,7 +450,6 @@ export default function UserDashboard({ activeTab }) {
             </button>
           </div>
 
-          {/* Premium Plan */}
           <div className={`bg-white p-8 rounded-3xl border ${plan === 'PREMIUM' ? 'border-blue-500 ring-4 ring-blue-50 shadow-md' : 'border-slate-200 shadow-sm'} relative flex flex-col`}>
             {plan === 'PREMIUM' && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-blue-500 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">Current</div>}
             <Crown size={32} className="text-blue-500 mb-4" />
@@ -468,7 +466,6 @@ export default function UserDashboard({ activeTab }) {
             </button>
           </div>
 
-          {/* Premium Plus Plan */}
           <div className={`bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-xl relative flex flex-col text-white`}>
             {plan === 'PREMIUM_PLUS' && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-500 text-white text-[10px] font-bold uppercase tracking-widest px-3 py-1 rounded-full">Current</div>}
             <Zap size={32} className="text-amber-400 mb-4" />
@@ -486,7 +483,6 @@ export default function UserDashboard({ activeTab }) {
           </div>
         </div>
 
-        {/* Custom Token Purchase Block */}
         <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 flex flex-col lg:flex-row gap-8 items-center justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
@@ -501,17 +497,12 @@ export default function UserDashboard({ activeTab }) {
               <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Select Amount</label>
               <div className="text-sm font-bold text-blue-600">{customTokenAmount} Tokens</div>
             </div>
-            
             <input 
-              type="range" 
-              min="10" 
-              max="500" 
-              step="10" 
+              type="range" min="10" max="500" step="10" 
               value={customTokenAmount} 
               onChange={(e) => setCustomTokenAmount(Number(e.target.value))}
               className="w-full accent-blue-600 cursor-pointer"
             />
-            
             <div className="flex items-center gap-4 mt-2 pt-4 border-t border-slate-200">
               <div className="flex-1">
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Cost (₹{TOKEN_PRICE_INR}/Token)</div>
@@ -529,7 +520,6 @@ export default function UserDashboard({ activeTab }) {
             </div>
           </div>
         </div>
-
       </div>
     );
   }

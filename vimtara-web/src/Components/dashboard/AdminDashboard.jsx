@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-// Fixed: Added Paperclip and Send to the imports
-import { Edit2, Trash2, Check, X, ShieldAlert, FileCheck, Building2, Filter, AlertTriangle, ArrowUpRight, Search, FileText, CheckCircle2, Eye, Paperclip, Send } from 'lucide-react';
+import { Edit2, Trash2, Check, X, ShieldAlert, FileCheck, Building2, Filter, AlertTriangle, ArrowUpRight, Search, FileText, CheckCircle2, Eye, Paperclip, Send, Download } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, CartesianGrid, Legend } from 'recharts';
 
 export default function AdminDashboard({ activeTab }) {
   const { user } = useSelector((state) => state.auth);
   
-  // Provisioning & Directory States
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newName, setNewName] = useState('');
@@ -17,12 +15,10 @@ export default function AdminDashboard({ activeTab }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', role: '' });
 
-  // Analytics States
   const [analyticsData, setAnalyticsData] = useState({ barData: [], pieData: [], totalFilings: 0 });
   const [timeFilter, setTimeFilter] = useState('6m');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Global Communications State (Admin Oversight)
   const [allThreads, setAllThreads] = useState([]);
   const [selectedThreadId, setSelectedThreadId] = useState(null);
 
@@ -108,8 +104,15 @@ export default function AdminDashboard({ activeTab }) {
     setEditForm({ name: member.name, email: member.email, role: member.role });
   };
 
+  // Trigger File Download
+  const handleDownload = (fileName, base64Data) => {
+    if (!base64Data) return alert("File data not available.");
+    const a = document.createElement('a');
+    a.href = base64Data;
+    a.download = fileName;
+    a.click();
+  };
 
-  // --- 1. ANALYTICS OVERVIEW ---
   if (activeTab === 'overview') {
     return (
       <div className="dash-item space-y-8 animate-in fade-in duration-500">
@@ -200,7 +203,6 @@ export default function AdminDashboard({ activeTab }) {
     );
   }
 
-  // --- 2. INDUSTRY COMPLIANCE MODULE ---
   if (activeTab === 'industry') {
     const complianceTrendData = [{ month: 'Jan', score: 85 }, { month: 'Feb', score: 88 }, { month: 'Mar', score: 86 }, { month: 'Apr', score: 92 }, { month: 'May', score: 95 }, { month: 'Jun', score: 94 }];
     const categoryData = [{ name: 'GST', filed: 120, pending: 5 }, { name: 'MCA', filed: 45, pending: 12 }, { name: 'EPFO', filed: 80, pending: 2 }, { name: 'Tax', filed: 60, pending: 0 }];
@@ -270,7 +272,6 @@ export default function AdminDashboard({ activeTab }) {
     );
   }
 
-  // --- 3. TEAM MANAGEMENT ---
   if (activeTab === 'team') {
     return (
       <div className="dash-item grid lg:grid-cols-[350px_1fr] gap-8 animate-in fade-in duration-500">
@@ -338,14 +339,13 @@ export default function AdminDashboard({ activeTab }) {
     );
   }
 
-  // --- 4. COMMUNICATIONS VIEW (REAL DATABASE CONNECTION) ---
+  // --- 4. COMMUNICATIONS VIEW (Oversight Mode) ---
   if (activeTab === 'comms') {
     const activeThread = allThreads.find(t => t.id === selectedThreadId);
 
     return (
       <div className="dash-item bg-transparent border border-slate-200 rounded-3xl overflow-hidden flex h-[650px] animate-in fade-in duration-500 shadow-sm">
         
-        {/* Sidebar: Thread List */}
         <div className="w-[30%] border-r border-slate-200 bg-slate-50 flex flex-col">
           <div className="p-5 border-b border-slate-200">
             <h2 className="font-bold text-slate-900">Communication Vault</h2>
@@ -377,11 +377,9 @@ export default function AdminDashboard({ activeTab }) {
           </div>
         </div>
         
-        {/* Main Chat Area */}
         <div className="w-[70%] flex flex-col bg-white">
           {activeThread ? (
             <>
-              {/* Admin Oversight Header */}
               <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
@@ -395,7 +393,6 @@ export default function AdminDashboard({ activeTab }) {
                 </div>
               </div>
 
-              {/* Chat Messages Log */}
               <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50/30">
                 {activeThread.messages.length === 0 ? (
                    <div className="text-center text-slate-400 text-sm mt-10">No messages in this thread yet.</div>
@@ -412,16 +409,25 @@ export default function AdminDashboard({ activeTab }) {
                           </div>
                         )}
 
+                        {/* UPDATE: Interactive File Download Card for Admin */}
                         {msg.hasAttachment && (
-                          <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm max-w-[80%] w-80">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isClient ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
+                          <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm max-w-[80%] w-80">
+                            <div className="flex items-center gap-3 mb-3">
+                              <div className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${isClient ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
                                 <FileText size={20} />
                               </div>
                               <div className="overflow-hidden">
                                 <div className="text-sm font-bold text-slate-900 truncate w-48">{msg.attachmentName}</div>
                                 <div className="text-xs text-slate-500">{msg.attachmentSize}</div>
                               </div>
+                            </div>
+                            <div className="flex items-center gap-2 border-t border-slate-100 pt-2.5">
+                              <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                                <Eye size={14}/> View
+                              </button>
+                              <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                                <Download size={14}/> Download
+                              </button>
                             </div>
                           </div>
                         )}
@@ -431,7 +437,6 @@ export default function AdminDashboard({ activeTab }) {
                 )}
               </div>
 
-              {/* Read-Only Input Area */}
               <div className="p-4 bg-white border-t border-slate-100">
                 <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 opacity-70">
                   <Paperclip size={20} className="text-slate-400" />

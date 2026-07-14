@@ -8,8 +8,9 @@ const app = express();
 const prisma = new PrismaClient();
 
 // Middleware
-app.use(cors()); // Allows your React app to talk to this API
-app.use(express.json()); // Allows Express to read JSON data
+app.use(cors()); 
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 const JWT_SECRET = 'your_super_secret_jwt_key_here'; // In production, move this to your .env file
 
@@ -222,10 +223,10 @@ app.post('/api/threads', async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Failed to create thread' }); }
 });
 
-// 4. Send Message (Updated to bypass tokens for Assistants/Admins)
+// 4. Send Message (Handles Base64 File Data)
 app.post('/api/messages', async (req, res) => {
   try {
-    const { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, tokenCost } = req.body;
+    const { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, attachmentData, tokenCost } = req.body;
     
     const user = await prisma.user.findUnique({ where: { id: senderId } });
     
@@ -236,14 +237,14 @@ app.post('/api/messages', async (req, res) => {
       }
       
       const [newMessage, updatedUser] = await prisma.$transaction([
-        prisma.message.create({ data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize } }),
+        prisma.message.create({ data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, attachmentData } }),
         prisma.user.update({ where: { id: senderId }, data: { dailyTokens: { decrement: tokenCost } } })
       ]);
       return res.json({ message: newMessage, tokensLeft: updatedUser.dailyTokens });
     } else {
       // Admin or Assistant sends a message (Free of charge)
       const newMessage = await prisma.message.create({
-        data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize }
+        data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, attachmentData }
       });
       return res.json({ message: newMessage, tokensLeft: null });
     }

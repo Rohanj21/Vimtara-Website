@@ -6,7 +6,6 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 export default function AssistantDashboard({ activeTab }) {
   const { user } = useSelector((state) => state.auth);
 
-  // --- STATE ---
   const [threads, setThreads] = useState([]);
   const [clients, setClients] = useState([]);
   const [activeThreadId, setActiveThreadId] = useState(null);
@@ -14,9 +13,7 @@ export default function AssistantDashboard({ activeTab }) {
   const [attachment, setAttachment] = useState(null);
   const fileInputRef = useRef(null);
 
-  // Communications Sub-Tab Filter
   const [chatFilter, setChatFilter] = useState('ALL'); 
-
   const PIE_COLORS = ['#3b82f6', '#f59e0b', '#10b981'];
 
   useEffect(() => {
@@ -49,8 +46,9 @@ export default function AssistantDashboard({ activeTab }) {
           content: messageInput,
           hasAttachment: !!attachment,
           attachmentName: attachment ? attachment.name : null,
-          attachmentSize: attachment ? '1.5 MB' : null,
-          tokenCost: 0 // Assistants don't pay tokens
+          attachmentSize: attachment ? attachment.size : null,
+          attachmentData: attachment ? attachment.data : null,
+          tokenCost: 0 
         })
       });
 
@@ -67,23 +65,41 @@ export default function AssistantDashboard({ activeTab }) {
     } catch (error) { console.error("Send error:", error); }
   };
 
+  // Convert File to Base64 String
   const handleFileAttach = (e) => {
-    if (e.target.files && e.target.files[0]) setAttachment(e.target.files[0]);
+    const file = e.target.files[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert("File too large. Maximum size is 5MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        setAttachment({
+          name: file.name,
+          size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
+          data: reader.result
+        });
+      };
+    }
   };
 
-  // --- 1. OVERVIEW (Charts & Data) ---
+  // Trigger File Download
+  const handleDownload = (fileName, base64Data) => {
+    if (!base64Data) return alert("File data not available.");
+    const a = document.createElement('a');
+    a.href = base64Data;
+    a.download = fileName;
+    a.click();
+  };
+
   if (activeTab === 'overview') {
-    const workloadData = [
-      { day: 'Mon', gst: 12, mca: 5, epfo: 2 }, { day: 'Tue', gst: 19, mca: 3, epfo: 4 },
-      { day: 'Wed', gst: 15, mca: 8, epfo: 1 }, { day: 'Thu', gst: 22, mca: 12, epfo: 6 },
-      { day: 'Fri', gst: 10, mca: 4, epfo: 8 }
-    ];
+    const workloadData = [{ day: 'Mon', gst: 12, mca: 5, epfo: 2 }, { day: 'Tue', gst: 19, mca: 3, epfo: 4 }, { day: 'Wed', gst: 15, mca: 8, epfo: 1 }, { day: 'Thu', gst: 22, mca: 12, epfo: 6 }, { day: 'Fri', gst: 10, mca: 4, epfo: 8 }];
     const taskStatus = [{ name: 'Pending', value: 45 }, { name: 'In Review', value: 20 }, { name: 'Completed', value: 85 }];
 
     return (
       <div className="dash-item space-y-8 animate-in fade-in duration-500">
-        
-        {/* Metric Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
             <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center"><Briefcase size={28}/></div>
@@ -109,7 +125,6 @@ export default function AssistantDashboard({ activeTab }) {
           </div>
         </div>
 
-        {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
             <div className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-6">Weekly Workload by Service</div>
@@ -157,7 +172,6 @@ export default function AssistantDashboard({ activeTab }) {
     );
   }
 
-  // --- 2. CLIENT STATUS ---
   if (activeTab === 'clients') {
     return (
       <div className="dash-item bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-500">
@@ -204,38 +218,24 @@ export default function AssistantDashboard({ activeTab }) {
     );
   }
 
-  // --- 3. COMMUNICATION MODULE (Categorized) ---
   if (activeTab === 'comms') {
-    // Filter threads based on the selected Sub-Tab
-    const filteredThreads = chatFilter === 'ALL' 
-      ? threads 
-      : threads.filter(t => t.service === chatFilter);
-      
+    const filteredThreads = chatFilter === 'ALL' ? threads : threads.filter(t => t.service === chatFilter);
     const activeThread = threads.find(t => t.id === activeThreadId);
 
     return (
       <div className="dash-item bg-transparent border border-slate-200 rounded-3xl overflow-hidden flex h-[700px] animate-in fade-in duration-500 shadow-sm relative">
-        
-        {/* Sidebar */}
         <div className="w-[35%] border-r border-slate-200 bg-white flex flex-col">
           <div className="p-6 border-b border-slate-100 bg-slate-50/50">
             <h2 className="font-bold text-slate-900">Client Communications</h2>
             <p className="text-xs text-slate-500 mt-1">Manage inbound requests and filings.</p>
           </div>
-
-          {/* Sub-Tab Filter System */}
           <div className="px-4 pt-4 pb-2 border-b border-slate-100 flex gap-2 overflow-x-auto no-scrollbar">
             {['ALL', 'GST', 'MCA', 'EPFO', 'TAX'].map(filter => (
-              <button 
-                key={filter}
-                onClick={() => setChatFilter(filter)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${chatFilter === filter ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
-              >
+              <button key={filter} onClick={() => setChatFilter(filter)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${chatFilter === filter ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
                 {filter}
               </button>
             ))}
           </div>
-
           <div className="overflow-y-auto p-4 space-y-3 flex-1 bg-slate-50/30">
             {filteredThreads.length === 0 ? (
                <div className="text-center text-slate-400 text-xs mt-10">No threads found for {chatFilter}.</div>
@@ -255,7 +255,6 @@ export default function AssistantDashboard({ activeTab }) {
           </div>
         </div>
         
-        {/* Main Chat Area */}
         {activeThread ? (
           <div className="w-[65%] flex flex-col bg-slate-50">
             <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between">
@@ -286,6 +285,8 @@ export default function AssistantDashboard({ activeTab }) {
                         {msg.content}
                       </div>
                     )}
+                    
+                    {/* UPDATE: Interactive File Download Card */}
                     {msg.hasAttachment && (
                       <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm max-w-[80%] w-80">
                         <div className="flex items-center gap-3 mb-3">
@@ -298,10 +299,10 @@ export default function AssistantDashboard({ activeTab }) {
                           </div>
                         </div>
                         <div className="flex items-center gap-2 border-t border-slate-100 pt-2.5">
-                          <button onClick={() => alert(`Opening ${msg.attachmentName} in secure viewer...`)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                          <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
                             <Eye size={14}/> View
                           </button>
-                          <button onClick={() => alert(`Downloading ${msg.attachmentName}...`)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                          <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
                             <Download size={14}/> Download
                           </button>
                         </div>
