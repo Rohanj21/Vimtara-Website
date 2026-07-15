@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { AlertCircle, FileText, CheckCircle2, Paperclip, Send, ArrowRight, Eye, MessageSquare, Briefcase, X, Building2, Check, Download } from 'lucide-react';
+import { AlertCircle, FileText, CheckCircle2, Paperclip, Send, ArrowRight, Eye, MessageSquare, Briefcase, X, Building2, Check, Download, Tag } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 
 export default function AssistantDashboard({ activeTab }) {
@@ -11,8 +11,11 @@ export default function AssistantDashboard({ activeTab }) {
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [messageInput, setMessageInput] = useState('');
   const [attachment, setAttachment] = useState(null);
+  
+  // FIXED: State is safely inside the component
+  const [attachmentTag, setAttachmentTag] = useState('Draft Filing'); 
+  
   const fileInputRef = useRef(null);
-
   const [chatFilter, setChatFilter] = useState('ALL'); 
   const PIE_COLORS = ['#3b82f6', '#f59e0b', '#10b981'];
 
@@ -48,6 +51,7 @@ export default function AssistantDashboard({ activeTab }) {
           attachmentName: attachment ? attachment.name : null,
           attachmentSize: attachment ? attachment.size : null,
           attachmentData: attachment ? attachment.data : null,
+          attachmentTag: attachment ? attachmentTag : null, 
           tokenCost: 0 
         })
       });
@@ -61,11 +65,11 @@ export default function AssistantDashboard({ activeTab }) {
         setThreads(updatedThreads);
         setMessageInput('');
         setAttachment(null);
+        setAttachmentTag('Draft Filing');
       }
     } catch (error) { console.error("Send error:", error); }
   };
 
-  // Convert File to Base64 String
   const handleFileAttach = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -85,7 +89,6 @@ export default function AssistantDashboard({ activeTab }) {
     }
   };
 
-  // Trigger File Download
   const handleDownload = (fileName, base64Data) => {
     if (!base64Data) return alert("File data not available.");
     const a = document.createElement('a');
@@ -285,10 +288,15 @@ export default function AssistantDashboard({ activeTab }) {
                         {msg.content}
                       </div>
                     )}
-                    
-                    {/* UPDATE: Interactive File Download Card */}
                     {msg.hasAttachment && (
                       <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm max-w-[80%] w-80">
+                        {msg.attachmentTag && (
+                          <div className="mb-3">
+                             <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded uppercase flex items-center gap-1 w-fit">
+                               <Tag size={10}/> {msg.attachmentTag}
+                             </span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-3 mb-3">
                           <div className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${isAssistant ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-600'}`}>
                             <FileText size={20} />
@@ -313,16 +321,33 @@ export default function AssistantDashboard({ activeTab }) {
               })}
             </div>
 
-            <div className="p-4 bg-white border-t border-slate-200">
+            <div className="p-4 bg-white border-t border-slate-200 flex flex-col">
               {attachment && (
-                <div className="mb-3 p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileText size={16} className="text-slate-600" />
-                    <span className="text-xs font-bold text-slate-900 truncate max-w-[200px]">{attachment.name}</span>
+                <div className="mb-3 p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText size={16} className="text-slate-600" />
+                      <span className="text-xs font-bold text-slate-900 truncate max-w-[200px]">{attachment.name}</span>
+                    </div>
+                    <button onClick={() => setAttachment(null)} className="text-slate-400 hover:text-rose-500"><X size={16}/></button>
                   </div>
-                  <button onClick={() => setAttachment(null)} className="text-slate-400 hover:text-rose-500"><X size={14}/></button>
+                  
+                  <div className="flex items-center gap-2 border-t border-slate-200 pt-3">
+                    <Tag size={14} className="text-slate-400"/>
+                    <select 
+                      value={attachmentTag} 
+                      onChange={(e) => setAttachmentTag(e.target.value)}
+                      className="bg-white border border-slate-200 text-xs font-bold text-slate-700 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="Draft Filing">Draft Filing</option>
+                      <option value="Final Acknowledgment">Final Acknowledgment</option>
+                      <option value="Reconciliation Report">Reconciliation Report</option>
+                      <option value="Challan / Receipt">Challan / Receipt</option>
+                    </select>
+                  </div>
                 </div>
               )}
+
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 focus-within:border-slate-400 focus-within:ring-2 focus-within:ring-slate-100 transition-all">
                 <input type="file" ref={fileInputRef} onChange={handleFileAttach} className="hidden" />
                 <button onClick={() => fileInputRef.current.click()} className="p-2 text-slate-400 hover:text-slate-700 transition-colors rounded-lg hover:bg-slate-200">

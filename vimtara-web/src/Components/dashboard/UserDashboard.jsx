@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { ShieldCheck, AlertCircle, FileText, CheckCircle2, Clock, UploadCloud, Paperclip, Send, ArrowRight, Download, Eye, MessageSquarePlus, Zap, Crown, X, CreditCard, Package, Calculator, Check } from 'lucide-react';
+import { ShieldCheck, AlertCircle, FileText, CheckCircle2, Clock, UploadCloud, Paperclip, Send, ArrowRight, Download, Eye, MessageSquarePlus, Zap, Crown, X, CreditCard, Package, Calculator, Check, Tag } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 export default function UserDashboard({ activeTab }) {
@@ -16,6 +16,9 @@ export default function UserDashboard({ activeTab }) {
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [messageInput, setMessageInput] = useState('');
   const [attachment, setAttachment] = useState(null);
+  
+  // FIXED: State is safely inside the component
+  const [attachmentTag, setAttachmentTag] = useState('General Document'); 
   
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [newChatTitle, setNewChatTitle] = useState('');
@@ -87,6 +90,7 @@ export default function UserDashboard({ activeTab }) {
           attachmentName: attachment ? attachment.name : null,
           attachmentSize: attachment ? attachment.size : null,
           attachmentData: attachment ? attachment.data : null,
+          attachmentTag: attachment ? attachmentTag : null, 
           tokenCost: cost
         })
       });
@@ -101,11 +105,11 @@ export default function UserDashboard({ activeTab }) {
         setTokens(data.tokensLeft);
         setMessageInput('');
         setAttachment(null);
+        setAttachmentTag('General Document'); 
       }
     } catch (error) { console.error("Message send error:", error); }
   };
 
-  // Convert File to Base64 String
   const handleFileAttach = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -119,13 +123,12 @@ export default function UserDashboard({ activeTab }) {
         setAttachment({
           name: file.name,
           size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-          data: reader.result // This is the Base64 String
+          data: reader.result 
         });
       };
     }
   };
 
-  // Trigger File Download
   const handleDownload = (fileName, base64Data) => {
     if (!base64Data) return alert("File data not available.");
     const a = document.createElement('a');
@@ -339,10 +342,15 @@ export default function UserDashboard({ activeTab }) {
                       {msg.content}
                     </div>
                   )}
-                  
-                  {/* UPDATE: Interactive File Download Card */}
                   {msg.hasAttachment && (
                     <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm max-w-[80%] w-80">
+                      {msg.attachmentTag && (
+                        <div className="mb-3">
+                           <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded uppercase flex items-center gap-1 w-fit">
+                             <Tag size={10}/> {msg.attachmentTag}
+                           </span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-3 mb-3">
                         <div className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${msg.senderId === user?.id ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
                           <FileText size={20} />
@@ -366,19 +374,36 @@ export default function UserDashboard({ activeTab }) {
               ))}
             </div>
 
-            <div className="p-4 bg-white border-t border-slate-200">
+            <div className="p-4 bg-white border-t border-slate-200 flex flex-col">
               {attachment && (
-                <div className="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileText size={16} className="text-blue-600" />
-                    <span className="text-xs font-bold text-blue-900 truncate max-w-[200px]">{attachment.name}</span>
+                <div className="mb-3 p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText size={16} className="text-slate-600" />
+                      <span className="text-xs font-bold text-slate-900 truncate max-w-[200px]">{attachment.name}</span>
+                    </div>
+                    <button onClick={() => setAttachment(null)} className="text-slate-400 hover:text-rose-500"><X size={16}/></button>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1"><Zap size={10}/> Costs 5 Tokens</span>
-                    <button onClick={() => setAttachment(null)} className="text-blue-400 hover:text-blue-700"><X size={14}/></button>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-slate-200 pt-3">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <Tag size={14} className="text-slate-400"/>
+                      <select 
+                        value={attachmentTag} 
+                        onChange={(e) => setAttachmentTag(e.target.value)}
+                        className="bg-white border border-slate-200 text-xs font-bold text-slate-700 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-500 w-full sm:w-auto"
+                      >
+                        <option value="General Document">General Document</option>
+                        <option value="Invoice / Receipt">Invoice / Receipt</option>
+                        <option value="Bank Statement">Bank Statement</option>
+                        <option value="Govt. Notice">Govt. Notice</option>
+                        <option value="KYC Document">KYC Document</option>
+                      </select>
+                    </div>
+                    <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded flex items-center gap-1 shrink-0"><Zap size={10}/> Costs 5 Tokens</span>
                   </div>
                 </div>
               )}
+
               <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
                 <input type="file" ref={fileInputRef} onChange={handleFileAttach} className="hidden" />
                 <button onClick={() => fileInputRef.current.click()} className="p-2 text-slate-400 hover:text-blue-600 transition-colors rounded-lg hover:bg-blue-50 relative group">

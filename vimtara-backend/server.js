@@ -223,28 +223,26 @@ app.post('/api/threads', async (req, res) => {
   } catch (error) { res.status(500).json({ error: 'Failed to create thread' }); }
 });
 
-// 4. Send Message (Handles Base64 File Data)
+// 4. Send Message (Handles Base64 File Data & Tags)
 app.post('/api/messages', async (req, res) => {
   try {
-    const { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, attachmentData, tokenCost } = req.body;
+    const { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, attachmentData, attachmentTag, tokenCost } = req.body;
     
     const user = await prisma.user.findUnique({ where: { id: senderId } });
     
-    // Only deduct tokens if the sender is a standard USER
     if (user.role === 'USER') {
       if (user.dailyTokens < tokenCost) {
         return res.status(403).json({ error: 'Insufficient tokens. Please upgrade your plan.' });
       }
       
       const [newMessage, updatedUser] = await prisma.$transaction([
-        prisma.message.create({ data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, attachmentData } }),
+        prisma.message.create({ data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, attachmentData, attachmentTag } }),
         prisma.user.update({ where: { id: senderId }, data: { dailyTokens: { decrement: tokenCost } } })
       ]);
       return res.json({ message: newMessage, tokensLeft: updatedUser.dailyTokens });
     } else {
-      // Admin or Assistant sends a message (Free of charge)
       const newMessage = await prisma.message.create({
-        data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, attachmentData }
+        data: { threadId, senderId, content, hasAttachment, attachmentName, attachmentSize, attachmentData, attachmentTag }
       });
       return res.json({ message: newMessage, tokensLeft: null });
     }

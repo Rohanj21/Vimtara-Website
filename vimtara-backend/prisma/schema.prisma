@@ -67,7 +67,8 @@ model Message {
   hasAttachment  Boolean   @default(false)
   attachmentName String?
   attachmentSize String?
-  attachmentData String?   // <-- NEW: Stores the actual file as a Base64 string
+  attachmentData String?
+  attachmentTag  String?   // <-- NEW: Stores the document type
   
   threadId       String
   thread         Thread    @relation(fields: [threadId], references: [id])
