@@ -50,8 +50,9 @@ model Filing {
 model Thread {
   id             String    @id @default(uuid())
   title          String
-  service        String    // e.g., 'GST', 'MCA', 'EPFO'
+  service        String    // e.g., 'GST', 'MCA'
   status         String    @default("OPEN")
+  mode           String    @default("AI") // <-- NEW: 'AI' or 'HUMAN'
   
   userId         String
   user           User      @relation(fields: [userId], references: [id])

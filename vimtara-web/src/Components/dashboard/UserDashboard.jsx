@@ -1,7 +1,28 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
-import { ShieldCheck, AlertCircle, FileText, CheckCircle2, Clock, UploadCloud, Paperclip, Send, ArrowRight, Download, Eye, MessageSquarePlus, Zap, Crown, X, CreditCard, Package, Calculator, Check, Tag } from 'lucide-react';
+import { ShieldCheck, AlertCircle, FileText, CheckCircle2, Clock, UploadCloud, Paperclip, Send, ArrowRight, Download, Eye, MessageSquarePlus, Zap, Crown, X, CreditCard, Package, Calculator, Check, Tag, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+
+// --- CUSTOM TYPEWRITER COMPONENT ---
+const TypewriterMessage = ({ content }) => {
+  const [displayed, setDisplayed] = useState('');
+  const chatBottomRef = useRef(null);
+
+  useEffect(() => {
+    let i = 0;
+    const interval = setInterval(() => {
+      setDisplayed(content.substring(0, i));
+      i++;
+      if (i > content.length) {
+        clearInterval(interval);
+      }
+    }, 15); // Adjust typing speed here (lower is faster)
+    
+    return () => clearInterval(interval);
+  }, [content]);
+
+  return <span>{displayed}</span>;
+};
 
 export default function UserDashboard({ activeTab }) {
   const { user } = useSelector((state) => state.auth);
@@ -16,14 +37,22 @@ export default function UserDashboard({ activeTab }) {
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [messageInput, setMessageInput] = useState('');
   const [attachment, setAttachment] = useState(null);
-  
-  // FIXED: State is safely inside the component
   const [attachmentTag, setAttachmentTag] = useState('General Document'); 
   
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [newChatTitle, setNewChatTitle] = useState('');
   const [newChatService, setNewChatService] = useState('GST');
+  const [newChatMode, setNewChatMode] = useState('AI'); 
+  
+  // NEW: State for AI processing indicator
+  const [isAIThinking, setIsAIThinking] = useState(false);
+
   const fileInputRef = useRef(null);
+  const chatBottomRef = useRef(null);
+
+  const scrollToBottom = () => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   useEffect(() => {
     if (!user?.id) return;
@@ -51,13 +80,22 @@ export default function UserDashboard({ activeTab }) {
     if (activeTab === 'comms') fetchThreads();
   }, [activeTab, user?.id]);
 
+  useEffect(() => {
+    scrollToBottom();
+  }, [threads, activeThreadId, isAIThinking]);
+
   const handleCreateThread = async (e) => {
     e.preventDefault();
     try {
       const res = await fetch('http://localhost:5000/api/threads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newChatTitle, service: newChatService, userId: user.id })
+        body: JSON.stringify({ 
+          title: newChatTitle, 
+          service: newChatService, 
+          userId: user.id,
+          mode: newChatMode 
+        })
       });
       if (res.ok) {
         const newThread = await res.json();
@@ -65,6 +103,7 @@ export default function UserDashboard({ activeTab }) {
         setActiveThreadId(newThread.id);
         setIsNewChatOpen(false);
         setNewChatTitle('');
+        setNewChatMode('AI'); 
       }
     } catch (error) { console.error("Failed to create thread:", error); }
   };
@@ -78,6 +117,43 @@ export default function UserDashboard({ activeTab }) {
       return;
     }
 
+    const currentInput = messageInput;
+    const currentAttachment = attachment;
+    const currentTag = attachmentTag;
+    
+    const activeThread = threads.find(t => t.id === activeThreadId);
+
+    // Reset input fields instantly
+    setMessageInput(''); 
+    setAttachment(null);
+    setAttachmentTag('General Document');
+
+    // Trigger AI thinking state if in AI mode
+    if (activeThread?.mode === 'AI') {
+      setIsAIThinking(true);
+    }
+
+    // Create optimistic local message object
+    const tempUserMsg = {
+      id: 'temp-' + Date.now(),
+      senderId: user.id,
+      content: currentInput,
+      hasAttachment: !!currentAttachment,
+      attachmentName: currentAttachment ? currentAttachment.name : null,
+      attachmentSize: currentAttachment ? currentAttachment.size : null,
+      attachmentData: currentAttachment ? currentAttachment.data : null,
+      attachmentTag: currentAttachment ? currentTag : null,
+      createdAt: new Date().toISOString()
+    };
+
+    // INSTANT OPTIMISTIC UPDATE
+    setThreads(prevThreads => prevThreads.map(t => {
+      if (t.id === activeThreadId) {
+        return { ...t, messages: [...(t.messages || []), tempUserMsg] };
+      }
+      return t;
+    }));
+
     try {
       const res = await fetch('http://localhost:5000/api/messages', {
         method: 'POST',
@@ -85,29 +161,55 @@ export default function UserDashboard({ activeTab }) {
         body: JSON.stringify({
           threadId: activeThreadId,
           senderId: user.id,
-          content: messageInput,
-          hasAttachment: !!attachment,
-          attachmentName: attachment ? attachment.name : null,
-          attachmentSize: attachment ? attachment.size : null,
-          attachmentData: attachment ? attachment.data : null,
-          attachmentTag: attachment ? attachmentTag : null, 
+          content: currentInput,
+          hasAttachment: !!currentAttachment,
+          attachmentName: currentAttachment ? currentAttachment.name : null,
+          attachmentSize: currentAttachment ? currentAttachment.size : null,
+          attachmentData: currentAttachment ? currentAttachment.data : null,
+          attachmentTag: currentAttachment ? currentTag : null, 
           tokenCost: cost
         })
       });
 
       if (res.ok) {
         const data = await res.json();
-        const updatedThreads = threads.map(t => {
-          if (t.id === activeThreadId) return { ...t, messages: [...t.messages, data.message] };
+        
+        // Reconcile optimistic message with database object & AI reply
+        setThreads(prevThreads => prevThreads.map(t => {
+          if (t.id === activeThreadId) {
+            const cleanMsgs = t.messages.filter(m => m.id !== tempUserMsg.id);
+            if (data.aiReply) {
+              // Flag the new AI reply so it triggers the typewriter effect
+              data.aiReply.isNewTyping = true;
+              return { ...t, messages: [...cleanMsgs, data.message, data.aiReply] };
+            }
+            return { ...t, messages: [...cleanMsgs, data.message] };
+          }
           return t;
-        });
-        setThreads(updatedThreads);
+        }));
+
         setTokens(data.tokensLeft);
-        setMessageInput('');
-        setAttachment(null);
-        setAttachmentTag('General Document'); 
       }
-    } catch (error) { console.error("Message send error:", error); }
+    } catch (error) { 
+      console.error("Message send error:", error); 
+    } finally {
+      // Always turn off the thinking indicator, even if the backend failed
+      setIsAIThinking(false);
+    }
+  };
+
+  const handleDeleteThread = async (id) => {
+    if (!window.confirm("Are you sure you want to permanently delete this conversation?")) return;
+    try {
+      const res = await fetch(`http://localhost:5000/api/threads/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        const remainingThreads = threads.filter(t => t.id !== id);
+        setThreads(remainingThreads);
+        if (activeThreadId === id) {
+          setActiveThreadId(remainingThreads.length > 0 ? remainingThreads[0].id : null);
+        }
+      }
+    } catch (error) { console.error("Failed to delete thread:", error); }
   };
 
   const handleFileAttach = (e) => {
@@ -257,12 +359,35 @@ export default function UserDashboard({ activeTab }) {
     const activeThread = threads.find(t => t.id === activeThreadId);
     return (
       <div className="dash-item bg-transparent border border-slate-200 rounded-3xl overflow-hidden flex h-[700px] animate-in fade-in duration-500 shadow-sm relative">
+        
+        {/* NEW CHAT MODAL */}
         {isNewChatOpen && (
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative">
               <button onClick={() => setIsNewChatOpen(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600"><X size={20}/></button>
               <h2 className="text-xl font-bold text-slate-900 mb-6">Start New Service Chat</h2>
               <form onSubmit={handleCreateThread} className="space-y-4">
+                
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">Assistance Protocol</label>
+                  <div className="grid grid-cols-2 gap-4 p-1 bg-slate-100 rounded-xl mb-2">
+                    <button 
+                      type="button"
+                      onClick={() => setNewChatMode('AI')}
+                      className={`py-2 text-xs font-black rounded-lg transition-all ${newChatMode === 'AI' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      ⚡ Local AI Core
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setNewChatMode('HUMAN')}
+                      className={`py-2 text-xs font-black rounded-lg transition-all ${newChatMode === 'HUMAN' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-700'}`}
+                    >
+                      👤 Human Assistant
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">Service Department</label>
                   <select value={newChatService} onChange={(e) => setNewChatService(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500">
@@ -276,11 +401,15 @@ export default function UserDashboard({ activeTab }) {
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2 block">Subject</label>
                   <input type="text" required placeholder="e.g., Notice regarding GSTR-3B" value={newChatTitle} onChange={(e) => setNewChatTitle(e.target.value)} className="w-full bg-slate-50 border border-slate-200 text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500" />
                 </div>
-                <button type="submit" className="w-full py-3 mt-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all shadow-lg">Create Action Thread</button>
+                <button type="submit" className={`w-full py-3 mt-2 text-white font-bold rounded-xl transition-all shadow-lg ${newChatMode === 'AI' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                  Create Action Thread
+                </button>
               </form>
             </div>
           </div>
         )}
+        
+        {/* SIDEBAR */}
         <div className="w-[30%] border-r border-slate-200 bg-white flex flex-col justify-between">
           <div>
             <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
@@ -299,13 +428,17 @@ export default function UserDashboard({ activeTab }) {
                 <div key={thread.id} onClick={() => setActiveThreadId(thread.id)} className={`p-4 rounded-xl border cursor-pointer relative overflow-hidden transition-all ${activeThreadId === thread.id ? 'border-blue-500 bg-blue-50/30 shadow-sm' : 'border-slate-200 hover:border-blue-300'}`}>
                   {activeThreadId === thread.id && <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>}
                   <div className="flex justify-between items-start mb-1">
-                    <div className="font-bold text-sm text-slate-900 truncate pr-2">{thread.title}</div>
+                    <div className="font-bold text-sm text-slate-900 truncate pr-2 flex items-center gap-1">
+                      {thread.mode === 'AI' && <span className="text-indigo-600">⚡</span>}
+                      {thread.title}
+                    </div>
                     <span className="text-[9px] font-bold bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{thread.service}</span>
                   </div>
                 </div>
               ))}
             </div>
           </div>
+          
           <div className="p-6 bg-slate-900 text-white m-4 rounded-2xl relative overflow-hidden">
              <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500 opacity-20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/3"></div>
              <div className="flex justify-between items-center mb-3 relative z-10">
@@ -321,60 +454,100 @@ export default function UserDashboard({ activeTab }) {
           </div>
         </div>
         
+        {/* MAIN CHAT AREA */}
         {activeThread ? (
-          <div className="w-[70%] flex flex-col bg-slate-50">
+          <div className="w-[70%] flex flex-col bg-slate-50 relative">
             <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">PS</div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900">Statutory Assistant</h3>
-                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Online</p>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${activeThread.mode === 'AI' ? 'bg-indigo-100 text-indigo-600' : 'bg-blue-100 text-blue-600'}`}>
+                  {activeThread.mode === 'AI' ? 'AI' : 'PS'}
                 </div>
+                <div>
+                  <h3 className="font-bold text-sm text-slate-900">
+                    {activeThread.mode === 'AI' ? 'Vimtara System AI' : 'Statutory Assistant'}
+                  </h3>
+                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">
+                    {activeThread.mode === 'AI' ? 'Processing Engine Ready' : 'Online'}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <button onClick={() => handleDeleteThread(activeThread.id)} className="text-xs font-bold text-rose-600 bg-rose-50 border border-rose-100 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1">
+                  <Trash2 size={14}/> Delete
+                </button>
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-8 space-y-6">
-              {activeThread.messages.map((msg) => (
-                <div key={msg.id} className={`flex flex-col ${msg.senderId === user?.id ? 'items-end' : 'items-start'}`}>
-                  <span className="text-[10px] font-bold text-slate-400 mb-1">{msg.senderId === user?.id ? 'You' : 'Assistant'}</span>
-                  {msg.content && (
-                    <div className={`${msg.senderId === user?.id ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'} px-5 py-3.5 rounded-2xl text-sm max-w-[80%] mb-2 break-words`}>
-                      {msg.content}
-                    </div>
-                  )}
-                  {msg.hasAttachment && (
-                    <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm max-w-[80%] w-80">
-                      {msg.attachmentTag && (
-                        <div className="mb-3">
-                           <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded uppercase flex items-center gap-1 w-fit">
-                             <Tag size={10}/> {msg.attachmentTag}
-                           </span>
+              {(activeThread.messages || []).map((msg) => {
+                const isMe = msg.senderId === user?.id;
+                const isAI = msg.senderId === 'SYSTEM_AI';
+
+                return (
+                  <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                    <span className="text-[10px] font-bold text-slate-400 mb-1">
+                      {isMe ? 'You' : isAI ? '⚡ Vimtara AI Core' : '👤 Assigned Assistant'}
+                    </span>
+                    
+                    {msg.content && (
+                      <div className={`${isMe ? 'bg-blue-600 text-white rounded-tr-none' : isAI ? 'bg-indigo-900 text-white rounded-tl-none border border-indigo-950 shadow-indigo-100 shadow-md' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'} px-5 py-3.5 rounded-2xl text-sm max-w-[80%] mb-2 break-words leading-relaxed`}>
+                        {/* APPLY TYPEWRITER EFFECT IF FLAG EXISTS */}
+                        {msg.isNewTyping ? <TypewriterMessage content={msg.content} /> : msg.content}
+                      </div>
+                    )}
+                    
+                    {msg.hasAttachment && (
+                      <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm max-w-[80%] w-80">
+                        {msg.attachmentTag && (
+                          <div className="mb-3">
+                             <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-100 text-slate-600 rounded uppercase flex items-center gap-1 w-fit">
+                               <Tag size={10}/> {msg.attachmentTag}
+                             </span>
+                          </div>
+                        )}
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${isMe ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
+                            <FileText size={20} />
+                          </div>
+                          <div className="overflow-hidden">
+                            <div className="text-sm font-bold text-slate-900 truncate w-48">{msg.attachmentName}</div>
+                            <div className="text-xs text-slate-500">{msg.attachmentSize}</div>
+                          </div>
                         </div>
-                      )}
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${msg.senderId === user?.id ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
-                          <FileText size={20} />
-                        </div>
-                        <div className="overflow-hidden">
-                          <div className="text-sm font-bold text-slate-900 truncate w-48">{msg.attachmentName}</div>
-                          <div className="text-xs text-slate-500">{msg.attachmentSize}</div>
+                        <div className="flex items-center gap-2 border-t border-slate-100 pt-2.5">
+                          <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                            <Eye size={14}/> View
+                          </button>
+                          <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+                            <Download size={14}/> Download
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 border-t border-slate-100 pt-2.5">
-                        <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
-                          <Eye size={14}/> View
-                        </button>
-                        <button onClick={() => handleDownload(msg.attachmentName, msg.attachmentData)} className="flex-1 py-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors flex items-center justify-center gap-1.5">
-                          <Download size={14}/> Download
-                        </button>
-                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              
+              {/* VIMTARA AI "THINKING" INDICATOR */}
+              {isAIThinking && (
+                <div className="flex flex-col items-start animate-in fade-in duration-300">
+                  <span className="text-[10px] font-bold text-slate-400 mb-1">⚡ Vimtara AI Core</span>
+                  <div className="bg-indigo-900 text-white px-5 py-3.5 rounded-2xl rounded-tl-none shadow-md flex items-center gap-3 border border-indigo-950">
+                    <div className="flex gap-1">
+                      <span className="w-1.5 h-1.5 bg-indigo-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-indigo-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-1.5 h-1.5 bg-indigo-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                     </div>
-                  )}
+                    <span className="text-sm font-medium text-indigo-200">Analyzing compliance vectors...</span>
+                  </div>
                 </div>
-              ))}
+              )}
+              
+              <div ref={chatBottomRef} />
             </div>
 
-            <div className="p-4 bg-white border-t border-slate-200 flex flex-col">
+            <div className="p-4 bg-white border-t border-slate-200 flex flex-col z-10">
               {attachment && (
                 <div className="mb-3 p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-3">
                   <div className="flex items-center justify-between">
@@ -384,6 +557,7 @@ export default function UserDashboard({ activeTab }) {
                     </div>
                     <button onClick={() => setAttachment(null)} className="text-slate-400 hover:text-rose-500"><X size={16}/></button>
                   </div>
+                  
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-slate-200 pt-3">
                     <div className="flex items-center gap-2 w-full sm:w-auto">
                       <Tag size={14} className="text-slate-400"/>
@@ -412,15 +586,21 @@ export default function UserDashboard({ activeTab }) {
                 </button>
                 <input 
                   type="text" 
-                  placeholder="Type your message..." 
+                  disabled={isAIThinking}
+                  placeholder={isAIThinking ? "AI is processing..." : activeThread.mode === 'AI' ? "Ask the AI Engine..." : "Type your message..."}
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  className="flex-1 bg-transparent text-sm p-2 focus:outline-none" 
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSendMessage();
+                    }
+                  }}
+                  className={`flex-1 bg-transparent text-sm p-2 focus:outline-none ${isAIThinking ? 'cursor-not-allowed opacity-50' : ''}`} 
                 />
                 <div className="flex items-center gap-2">
                   {!attachment && messageInput && <span className="text-[10px] font-bold text-slate-400 mr-2 flex items-center gap-1"><Zap size={10}/> 1 Token</span>}
-                  <button onClick={handleSendMessage} className={`p-2 rounded-lg transition-colors shadow-md ${!messageInput.trim() && !attachment ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+                  <button disabled={isAIThinking} onClick={handleSendMessage} className={`p-2 rounded-lg transition-colors shadow-md ${(!messageInput.trim() && !attachment) || isAIThinking ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : activeThread.mode === 'AI' ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
                     <Send size={18} />
                   </button>
                 </div>
