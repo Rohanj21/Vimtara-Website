@@ -2,26 +2,45 @@ import { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { ShieldCheck, AlertCircle, FileText, CheckCircle2, Clock, UploadCloud, Paperclip, Send, ArrowRight, Download, Eye, MessageSquarePlus, Zap, Crown, X, CreditCard, Package, Calculator, Check, Tag, Trash2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
-// --- CUSTOM TYPEWRITER COMPONENT ---
+// --- CUSTOM MARKDOWN TYPEWRITER COMPONENT ---
 const TypewriterMessage = ({ content }) => {
   const [displayed, setDisplayed] = useState('');
-  const chatBottomRef = useRef(null);
 
   useEffect(() => {
     let i = 0;
     const interval = setInterval(() => {
       setDisplayed(content.substring(0, i));
-      i++;
+      i += 2; // Increased step for smooth markdown typing
       if (i > content.length) {
+        setDisplayed(content); // Ensure full text is set at the end
         clearInterval(interval);
       }
-    }, 15); // Adjust typing speed here (lower is faster)
+    }, 10);
     
     return () => clearInterval(interval);
   }, [content]);
 
-  return <span>{displayed}</span>;
+  return (
+    <div className="markdown-content text-sm leading-relaxed space-y-2">
+      <ReactMarkdown 
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h3: ({ node, ...props }) => <h3 className="text-base font-bold text-indigo-200 mt-3 mb-1 border-b border-indigo-700/50 pb-1" {...props} />,
+          p: ({ node, ...props }) => <p className="mb-2 text-slate-100" {...props} />,
+          ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-1 my-2 pl-1 text-slate-200" {...props} />,
+          ol: ({ node, ...props }) => <ol className="list-decimal list-inside space-y-1.5 my-2 pl-1 text-slate-200" {...props} />,
+          li: ({ node, ...props }) => <li className="text-slate-100" {...props} />,
+          strong: ({ node, ...props }) => <strong className="font-semibold text-white bg-indigo-950/60 px-1 py-0.5 rounded border border-indigo-800/40" {...props} />,
+          a: ({ node, ...props }) => <a className="text-blue-300 underline underline-offset-2 hover:text-blue-100 font-medium transition-colors" target="_blank" rel="noopener noreferrer" {...props} />
+        }}
+      >
+        {displayed}
+      </ReactMarkdown>
+    </div>
+  );
 };
 
 export default function UserDashboard({ activeTab }) {
@@ -491,11 +510,29 @@ export default function UserDashboard({ activeTab }) {
                     </span>
                     
                     {msg.content && (
-                      <div className={`${isMe ? 'bg-blue-600 text-white rounded-tr-none' : isAI ? 'bg-indigo-900 text-white rounded-tl-none border border-indigo-950 shadow-indigo-100 shadow-md' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'} px-5 py-3.5 rounded-2xl text-sm max-w-[80%] mb-2 break-words leading-relaxed`}>
-                        {/* APPLY TYPEWRITER EFFECT IF FLAG EXISTS */}
-                        {msg.isNewTyping ? <TypewriterMessage content={msg.content} /> : msg.content}
-                      </div>
-                    )}
+  <div className={`${isMe ? 'bg-blue-600 text-white rounded-tr-none' : isAI ? 'bg-indigo-900 text-white rounded-tl-none border border-indigo-950 shadow-md' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'} px-5 py-3.5 rounded-2xl text-sm max-w-[85%] mb-2 break-words leading-relaxed`}>
+    {msg.isNewTyping ? (
+      <TypewriterMessage content={msg.content} />
+    ) : (
+      <div className="markdown-content text-sm leading-relaxed space-y-2">
+        <ReactMarkdown 
+          remarkPlugins={[remarkGfm]}
+          components={{
+            h3: ({ node, ...props }) => <h3 className="text-base font-bold text-indigo-200 mt-3 mb-1 border-b border-indigo-700/50 pb-1" {...props} />,
+            p: ({ node, ...props }) => <p className="mb-2 text-slate-100" {...props} />,
+            ul: ({ node, ...props }) => <ul className="list-disc list-inside space-y-1 my-2 pl-1 text-slate-200" {...props} />,
+            ol: ({ node, ...props }) => <ol className="list-decimal list-inside space-y-1.5 my-2 pl-1 text-slate-200" {...props} />,
+            li: ({ node, ...props }) => <li className="text-slate-100" {...props} />,
+            strong: ({ node, ...props }) => <strong className="font-semibold text-white bg-indigo-950/60 px-1 py-0.5 rounded border border-indigo-800/40" {...props} />,
+            a: ({ node, ...props }) => <a className="text-blue-300 underline underline-offset-2 hover:text-blue-100 font-medium transition-colors" target="_blank" rel="noopener noreferrer" {...props} />
+          }}
+        >
+          {msg.content}
+        </ReactMarkdown>
+      </div>
+    )}
+  </div>
+)}
                     
                     {msg.hasAttachment && (
                       <div className="bg-white border border-slate-200 p-3.5 rounded-2xl shadow-sm max-w-[80%] w-80">

@@ -67,13 +67,18 @@ async def query_ai(request: QueryRequest):
                 
         context_string = "\n\n".join(context_chunks)
         
-        # 4. Construct the prompt for Ollama
+       # 4. Construct a strict, modern Markdown prompt for Ollama
         system_prompt = (
-            "You are Vimtara Statutory AI, a strict Indian compliance assistant.\n"
-            "Use ONLY the following context to answer the user's question. "
-            "If the answer is not in the context, explicitly state that you do not know.\n\n"
+            "You are Vimtara Statutory AI, an expert Indian corporate compliance assistant.\n"
+            "Format your response using professional, clean Markdown:\n"
+            "- Use clear Section Headings (### Heading)\n"
+            "- Use Bullet Points (*) or Numbered Lists (1.) for step-by-step instructions\n"
+            "- Use **Bold Text** for key terms, deadlines, and portal names\n"
+            "- Convert all web addresses into standard Markdown hyperlinks: [Link Text](URL)\n"
+            "- Keep paragraphs short and scannable\n\n"
+            "Use ONLY the following context to answer the user's question:\n"
             f"Context:\n{context_string}\n\n"
-            f"Question: {request.prompt}"
+            f"User Question: {request.prompt}"
         )
         
         # 5. Ask the local Ollama LLM
