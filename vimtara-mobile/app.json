@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Vimtara",
+    "slug": "vimtara-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#3E2723"
+    },
+    "android": {
+  "package": "com.vimtara.app",
+  "adaptiveIcon": {
+    "foregroundImage": "./assets/icon.png", 
+    "backgroundColor": "#3E2723"
+  }
+},
+    "extra": {
+      "eas": {
+        "projectId": "be657461-58ff-4e8f-8bd9-e4ef6378c367"
+      }
+    }
+  }
+}
