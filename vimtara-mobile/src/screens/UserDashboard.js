@@ -1,160 +1,138 @@
-import React, { useState, useContext } from 'react';
-import { 
-  View, Text, TextInput, TouchableOpacity, FlatList, 
-  StyleSheet, SafeAreaView, ScrollView 
-} from 'react-native';
+import React, { useState, useEffect, useContext } from 'react';
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, SafeAreaView, KeyboardAvoidingView, Platform } from 'react-native';
+import axios from 'axios';
 import AIMessageBubble from '../components/AIMessageBubble';
 import { AuthContext } from '../context/AuthContext';
-import axios from 'axios';
 import { API_URL } from '../config/api';
 
-export default function UserDashboard() {
-  const { logout } = useContext(AuthContext);
-  const [activeTab, setActiveTab] = useState('ai_chat'); // 'ai_chat' | 'filings'
-  const [inputPrompt, setInputPrompt] = useState('');
-  const [messages, setMessages] = useState([
-    {
-      id: '1',
-      sender: 'ai',
-      text: "### Welcome to Vimtara Statutory AI 👋\nAsk me anything about Indian statutory compliance, cap tables, or ESOP management."
+export default function UserDashboard({ navigation }) {
+  const { userToken } = useContext(AuthContext);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+
+  // 1. Fetch Chat History from PostgreSQL on load
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  const fetchHistory = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/chat/history`, {
+        headers: { Authorization: `Bearer ${userToken}` }
+      });
+      setMessages(response.data.messages);
+    } catch (error) {
+      console.error("Failed to load history:", error);
     }
-  ]);
+  };
 
-  const handleSendQuery = async () => {
-    if (!inputPrompt.trim()) return;
+  // 2. Send message to backend and AI
+  const sendMessage = async () => {
+    if (!input.trim()) return;
 
-    const userMsg = { id: Date.now().toString(), sender: 'user', text: inputPrompt };
-    setMessages(prev => [...prev, userMsg]);
-    const currentQuery = inputPrompt;
-    setInputPrompt('');
+    const userMessage = { id: Date.now().toString(), sender: 'user', content: input };
+    setMessages(prev => [...prev, userMessage]);
+    const currentInput = input;
+    setInput('');
+    setIsLoading(true);
 
     try {
-      // Connect to Python RAG service endpoint
-      const res = await axios.post(`${API_URL}/ai/query`, { prompt: currentQuery });
-      const aiMsg = { 
-        id: (Date.now() + 1).toString(), 
-        sender: 'ai', 
-        text: res.data.response || "No response received." 
-      };
-      setMessages(prev => [...prev, aiMsg]);
-    } catch (e) {
-      setMessages(prev => [
-        ...prev, 
-        { id: (Date.now() + 1).toString(), sender: 'ai', text: "⚠️ Network connection error. Please verify API host." }
-      ]);
+      // Hits your Node API, saves user msg to Postgres, queries Python RAG, saves AI msg to Postgres, and returns result
+      const response = await axios.post(`${API_URL}/chat/send`, 
+        { prompt: currentInput },
+        { headers: { Authorization: `Bearer ${userToken}` } }
+      );
+      
+      const aiMessage = { id: (Date.now() + 1).toString(), sender: 'ai', content: response.data.ai_response };
+      setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      setMessages(prev => [...prev, { id: 'error', sender: 'ai', content: "Network Error: Could not connect to database." }]);
     }
+    setIsLoading(false);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>User Portal</Text>
-          <Text style={styles.headerSubtitle}>Statutory Compliance Desk</Text>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        
+        {/* Mobile App Bar */}
+        <View style={styles.appBar}>
+          <TouchableOpacity onPress={() => navigation.openDrawer()}>
+            <Text style={styles.hamburger}>☰</Text>
+          </TouchableOpacity>
+          <Text style={styles.appBarTitle}>Your Action Desk</Text>
+          <View style={{width: 30}} />
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-      </View>
 
-      {/* Navigation Tabs */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'ai_chat' && styles.activeTab]} 
-          onPress={() => setActiveTab('ai_chat')}
-        >
-          <Text style={[styles.tabText, activeTab === 'ai_chat' && styles.activeTabText]}>AI Copilot</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'filings' && styles.activeTab]} 
-          onPress={() => setActiveTab('filings')}
-        >
-          <Text style={[styles.tabText, activeTab === 'filings' && styles.activeTabText]}>Active Filings</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Tab Content */}
-      {activeTab === 'ai_chat' ? (
-        <View style={styles.chatContainer}>
-          <FlatList
-            data={messages}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <View style={item.sender === 'user' ? styles.userBubble : styles.aiWrapper}>
-                {item.sender === 'user' ? (
-                  <Text style={styles.userText}>{item.text}</Text>
-                ) : (
-                  <AIMessageBubble content={item.text} />
-                )}
+        {/* Thread Selector (Mimics the left column of the web app) */}
+        <View style={styles.threadSelector}>
+          <TouchableOpacity style={styles.newRequestBtn}>
+            <Text style={styles.newRequestText}>+ New Request</Text>
+          </TouchableOpacity>
+          <FlatList 
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            data={['New GST Filings', 'GST', 'GST Filings']}
+            keyExtractor={(item, index) => index.toString()}
+            renderItem={({item}) => (
+              <View style={styles.threadPill}>
+                <Text style={styles.threadPillText}>⚡ {item}</Text>
               </View>
             )}
-            contentContainerStyle={{ paddingVertical: 12 }}
           />
-
-          {/* Input Box */}
-          <View style={styles.inputBar}>
-            <TextInput 
-              style={styles.chatInput} 
-              placeholder="Ask compliance query..."
-              placeholderTextColor="#8d6e63"
-              value={inputPrompt}
-              onChangeText={setInputPrompt}
-            />
-            <TouchableOpacity style={styles.sendBtn} onPress={handleSendQuery}>
-              <Text style={styles.sendBtnText}>Send</Text>
-            </TouchableOpacity>
-          </View>
         </View>
-      ) : (
-        <ScrollView style={styles.filingContainer}>
-          <Text style={styles.sectionHeader}>Upcoming Statutory Deadlines</Text>
-          
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>GSTR-3B Monthly Return</Text>
-            <Text style={styles.cardSub}>Due Date: 20th of this month</Text>
-            <View style={[styles.badge, { backgroundColor: '#fff3cd' }]}>
-              <Text style={{ color: '#856404', fontWeight: 'bold' }}>IN PROGRESS</Text>
-            </View>
-          </View>
 
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>PF & ESIC Settlement</Text>
-            <Text style={styles.cardSub}>Due Date: 15th of this month</Text>
-            <View style={[styles.badge, { backgroundColor: '#d4edda' }]}>
-              <Text style={{ color: '#155724', fontWeight: 'bold' }}>COMPLETED</Text>
+        {/* Chat Interface */}
+        <FlatList
+          data={messages}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.chatArea}
+          renderItem={({ item }) => (
+            <View style={item.sender === 'user' ? styles.userBubble : styles.aiBubble}>
+              {item.sender === 'user' ? (
+                <Text style={styles.userText}>{item.content}</Text>
+              ) : (
+                <AIMessageBubble content={item.content} />
+              )}
             </View>
-          </View>
-        </ScrollView>
-      )}
+          )}
+        />
+
+        {/* Input Area */}
+        <View style={styles.inputContainer}>
+          <TextInput 
+            style={styles.input} 
+            placeholder="Ask the AI Engine..."
+            placeholderTextColor="#8d6e63"
+            value={input}
+            onChangeText={setInput}
+          />
+          <TouchableOpacity style={styles.sendBtn} onPress={sendMessage} disabled={isLoading}>
+            <Text style={styles.sendText}>{isLoading ? '...' : 'Send'}</Text>
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, backgroundColor: '#3E2723' },
-  headerTitle: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
-  headerSubtitle: { color: '#D7CCC8', fontSize: 12 },
-  logoutBtn: { backgroundColor: '#5D4037', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 },
-  logoutText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-  tabBar: { flexDirection: 'row', backgroundColor: '#EFEBE9', padding: 4 },
-  tab: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 6 },
-  activeTab: { backgroundColor: '#FFFFFF' },
-  tabText: { color: '#5D4037', fontWeight: '600' },
-  activeTabText: { color: '#3E2723', fontWeight: 'bold' },
-  chatContainer: { flex: 1, paddingHorizontal: 16 },
-  userBubble: { alignSelf: 'flex-end', backgroundColor: '#3E2723', padding: 12, borderRadius: 12, marginVertical: 4, maxWidth: '80%' },
-  userText: { color: '#fff', fontSize: 14 },
-  aiWrapper: { alignSelf: 'flex-start', marginVertical: 4, width: '100%' },
-  inputBar: { flexDirection: 'row', paddingVertical: 12, borderTopWidth: 1, borderColor: '#e2e8f0' },
-  chatInput: { flex: 1, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, backgroundColor: '#fff', color: '#000' },
-  sendBtn: { backgroundColor: '#3E2723', paddingHorizontal: 16, justifyContent: 'center', borderRadius: 8, marginLeft: 8 },
-  sendBtnText: { color: '#fff', fontWeight: 'bold' },
-  filingContainer: { padding: 16 },
-  sectionHeader: { fontSize: 16, fontWeight: 'bold', color: '#3E2723', marginBottom: 12 },
-  card: { backgroundColor: '#fff', padding: 16, borderRadius: 12, marginBottom: 12, elevation: 2 },
-  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#1e293b' },
-  cardSub: { color: '#64748b', marginVertical: 4 },
-  badge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4, marginTop: 8 }
+  container: { flex: 1, backgroundColor: '#FFFFFF' },
+  appBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderColor: '#f1f5f9' },
+  hamburger: { fontSize: 24, color: '#3E2723' },
+  appBarTitle: { fontSize: 18, fontWeight: 'bold', color: '#2D1A15' },
+  threadSelector: { padding: 12, borderBottomWidth: 1, borderColor: '#f1f5f9', backgroundColor: '#fafafa' },
+  newRequestBtn: { backgroundColor: '#3E2723', padding: 12, borderRadius: 8, alignItems: 'center', marginBottom: 12 },
+  newRequestText: { color: 'white', fontWeight: 'bold' },
+  threadPill: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#e2e8f0', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, marginRight: 8 },
+  threadPillText: { color: '#3E2723', fontWeight: '600' },
+  chatArea: { padding: 16, paddingBottom: 40 },
+  userBubble: { alignSelf: 'flex-end', backgroundColor: '#5D4037', padding: 12, borderRadius: 16, borderTopRightRadius: 4, maxWidth: '80%', marginVertical: 6 },
+  userText: { color: 'white', fontSize: 15 },
+  aiBubble: { alignSelf: 'flex-start', marginVertical: 6, width: '100%' },
+  inputContainer: { flexDirection: 'row', padding: 16, borderTopWidth: 1, borderColor: '#f1f5f9', backgroundColor: '#FFFFFF' },
+  input: { flex: 1, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 24, paddingHorizontal: 16, paddingVertical: 12, marginRight: 12, color: '#000' },
+  sendBtn: { backgroundColor: '#3E2723', justifyContent: 'center', paddingHorizontal: 20, borderRadius: 24 },
+  sendText: { color: 'white', fontWeight: 'bold' }
 });
